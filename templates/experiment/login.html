@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-5 mt-5">
+        <h3 class="text-center fw-bold mb-4"><i class="bi bi-lock-fill text-primary"></i> システムログイン</h3>
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                <form method="post">
+                    {% csrf_token %}
+                    {% for field in form %}
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">{{ field.label }}</label>
+                            <input type="{{ field.field.widget.input_type }}" name="{{ field.name }}" class="form-control">
+                        </div>
+                    {% endfor %}
+                    <button type="submit" class="btn btn-primary w-100 fw-bold mt-3 py-2">ログイン</button>
+                </form>
+
+                <hr class="my-4">
+                <div class="text-center">
+                    <p class="text-muted small mb-2">アカウントをお持ちでない方</p>
+                    <a href="{% url 'signup' %}" class="btn btn-outline-primary fw-bold px-4">
+                        <i class="bi bi-person-plus-fill"></i> 新規ユーザー登録
+                    </a>
+                </div>
+                </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

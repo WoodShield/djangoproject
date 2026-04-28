@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 mt-4">
+        <h3 class="fw-bold mb-3"><i class="bi bi-person-gear text-success"></i> マイページ設定</h3>
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">{{ form.display_name.label }}</label>
+                        {{ form.display_name }}
+                        <div class="form-text">システム上で表示される名前を入力してください（例：山田 太郎）</div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">{{ form.organization.label }}</label>
+                        {{ form.organization }}
+                        <div class="form-text">所属する部署を選択してください。この設定によってアクセスできるワークスペースが変わります。</div>
+                    </div>
+
+                    <div class="text-end">
+                        <a href="{% url 'workspace_list' %}" class="btn btn-secondary me-2">キャンセル</a>
+                        <button type="submit" class="btn btn-success fw-bold px-4">設定を保存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="card shadow-sm border-0 bg-light">
+            <div class="card-body p-4 text-center">
+                <h6 class="fw-bold  mb-2"><i class="bi bi-building-add"></i> 所属する部署が選択肢にない場合</h6>
+                <p class="small text-muted mb-3">
+                    新しく部署（組織）をシステムに登録し、上の選択肢に追加することができます。
+                </p>
+                <a href="{% url 'organization_create' %}" class="btn btn-outline-primary fw-bold btn-sm px-4 shadow-sm">
+                    新しく部署を登録する
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

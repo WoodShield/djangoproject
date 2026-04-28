@@ -1,0 +1,434 @@
+<div class="row">
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-light fw-bold">
+                <i class="bi bi-database-fill-add"></i> 1. 対象データの読み込み
+            </div>
+            <div class="card-body">
+                <form id="datasetConfigForm">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-primary">解析対象のデータベースを選択</label>
+                        <select class="form-select mb-2" id="targetThemeSelect" name="database_ids" multiple style="height: 150px;" required>
+                            {% for database in databases %}
+                                <option value="{{ database.pk }}">{{ database.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text small mb-3">※複数選択すると項目名が一致する列で自動統合されます（Ctrl/Cmdキーで複数選択）</div>
+                    </div>
+
+                    <button type="button" id="generateDatasetBtn" class="btn btn-primary w-100 fw-bold shadow-sm py-2">
+                        <i class="bi bi-table"></i> 生データを読み込んでプレビュー
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div id="sideActionArea" class="card shadow-sm border-primary mb-4" style="display: none;">
+            <div class="card-header bg-primary text-white fw-bold">
+                <i class="bi bi-check-circle"></i> 2. 解析用データの生成
+            </div>
+            <div class="card-body">
+                <p class="small mb-3">右側の画面で変数の役割(X, Y)と属性(数値・カテゴリー)・除外範囲を確認し、確定してください。</p>
+
+                <div id="restoreModelArea" class="mb-4 d-none p-3 border border-primary rounded bg-white shadow-sm">
+                    <label class="form-label fw-bold small text-primary"><i class="bi bi-clock-history"></i> 過去のモデルから条件(X/Y)を復元</label>
+                    <select id="restoreModelSelect" class="form-select form-select-sm mb-2"></select>
+                    <button type="button" id="applyModelConfigBtn" class="btn btn-outline-primary btn-sm w-100 fw-bold">
+                        <i class="bi bi-arrow-down-circle"></i> このモデルの設定を適用する
+                    </button>
+                </div>
+
+                <label class="form-label fw-bold small"><i class="bi bi-magic"></i> 欠損値補完エンジンの選択</label>
+                <div class="alert alert-success py-3 px-3 small border-0 shadow-sm" role="alert">
+                    <h6 class="fw-bold small"><i class="bi bi-shield-check"></i> データロス防止機能 (欠損値補完)</h6>
+                    <p class="mb-0 text-muted" style="line-height: 1.4;">
+                        実験データに「空白」や「未入力」があっても、他の有効なデータを無駄にしません。<br>
+                        <strong>k-NN(最近傍法)アルゴリズム</strong>を適用することで、類似したロットの測定値から、空白部分の数値を統計的に予測・穴埋めし、解析可能なデータセットを再構築します。
+                    </p>
+                </div>
+                <select class="form-select form-select-sm mb-4" id="finalImputationMethod">
+                    <option value="knn" selected>k-NN法 (類似データからの高度な予測) ★推奨</option>
+                    <option value="median">中央値 (代表的な傾向を維持)</option>
+                    <option value="mean">平均値 (全体のバランスを維持)</option>
+                    <option value="drop">行削除 (欠損があるデータは一切使わない)</option>
+                </select>
+
+                <button type="button" id="confirmCurationBtn" class="btn btn-success w-100 fw-bold shadow-sm py-2">
+                    <i class="bi bi-play-fill"></i> 解析用データを最終生成して進む
+                </button>                
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card shadow-sm border-0 h-100"> <div class="card-header bg-white border-bottom fw-bold d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-search"></i>　 データプレビュー ＆ 高度な変数設定</span>
+            <div>
+                <a href="{% url 'download_curated_data' workspace.pk %}" id="downloadCuratedBtn" class="btn btn-sm btn-outline-success d-none me-2 fw-bold shadow-sm">
+                    <i class="bi bi-download"></i> 補完済データをダウンロード
+                </a>
+                <span class="badge bg-secondary rounded-pill" id="dataCountBadge">未生成</span>
+            </div>
+        </div>
+
+            
+            <div class="card-body bg-light rounded-bottom p-0" style="min-height: 650px;">
+                <div id="previewPlaceholder" class="text-center text-muted p-5">
+                    <i class="bi bi-arrow-left-circle display-4 mb-3 d-block"></i>
+                    <h5>左のパネルでデータベースを選択して「生データを読み込み」を押してください</h5>
+                </div>
+
+                <div id="previewTableContainer" class="w-100 bg-white p-3 border-bottom shadow-sm" style="overflow: auto; max-height: 350px; display:none;">
+                </div>
+
+                <div id="curationSection" class="p-4 bg-white" style="display: none;">
+                    <div class="alert alert-secondary py-3 mb-4">
+                        <h6 class="fw-bold"><i class="bi bi-info-circle-fill"></i> 変数の役割定義と詳細設定</h6>
+                        <p class="small mb-2">AIに正しいルールを学習させるため、各項目の役割を仕分けてください。</p>
+                        <ul class="small mb-0 text-dark">
+                            <li><strong class="text-primary">条件・要因 (X)</strong>：原料の量や処理時間など、結果に影響を与える「入力条件」</li>
+                            <li><strong class="text-success">評価項目・結果 (Y)</strong>：粘度や水分量など、最終的にAIに予測させたい「目標値」</li>
+                            <li><strong class="text-dark">除外リスト</strong>：Lot番号など、化学的な結果に無関係な項目</li>
+                        </ul>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-4 text-center">
+                            <label class="form-label fw-bold small ">除外リスト</label>
+                            <select id="listExclude" class="form-select bg-light" multiple style="height: 150px; font-size: 0.82rem;"></select>
+                        </div>
+                        <div class="col-md-4 text-center">
+                            <label class="form-label fw-bold small text-primary">条件・要因 (X:説明変数)</label>
+                            <select id="listX" class="form-select bg-light" multiple style="height: 150px; font-size: 0.82rem;"></select>
+                        </div>
+                        <div class="col-md-4 text-center">
+                            <label class="form-label fw-bold small text-success">評価項目・結果 (Y：目的変数)</label>
+                            <select id="listY" class="form-select bg-light" multiple style="height: 150px; font-size: 0.82rem;"></select>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-center gap-2 mb-4">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btnMoveExclude"><i class="bi bi-arrow-up"></i> 除外へ</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="btnMoveX"><i class="bi bi-arrow-up"></i> Xへ</button>
+                        <button type="button" class="btn btn-outline-success btn-sm" id="btnMoveY"><i class="bi bi-arrow-up"></i> Yへ</button>
+                    </div>
+
+                    <div class="border rounded p-3 bg-light shadow-sm mb-4">
+                        <h6 class="fw-bold mb-3 small"><i class="bi bi-filter-square"></i> 項目別の詳細クレンジング設定 ($X, Y$ のみ)</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered bg-white small mb-0 align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>項目名</th>
+                                        <th style="width: 140px;">データ属性</th>
+                                        <th>下限(Min)除外</th>
+                                        <th>上限(Max)除外</th>
+                                        <th>備考</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="curationTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="processingSummaryAlert" class="alert alert-info alert-dismissible fade show position-absolute top-0 start-50 translate-middle-x mt-3 shadow-sm d-none" style="z-index: 1050; width: 90%;">
+                    <i class="bi bi-info-circle-fill"></i> <span id="summaryText"></span>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const generateBtn = document.getElementById('generateDatasetBtn');
+    const sideActionArea = document.getElementById('sideActionArea');
+    const previewContainer = document.getElementById('previewTableContainer');
+    const placeholder = document.getElementById('previewPlaceholder');
+    const curationSection = document.getElementById('curationSection');
+    
+    const listExclude = document.getElementById('listExclude');
+    const listX = document.getElementById('listX');
+    const listY = document.getElementById('listY');
+    const curationTableBody = document.getElementById('curationTableBody');
+    let currentColumns = null;
+    let fetchedModelsForRestore = []; // ★追加: 復元用のモデルリスト保持
+
+    function renderCurationTable() {
+        curationTableBody.innerHTML = '';
+        const activeOptions = [...Array.from(listX.options), ...Array.from(listY.options)];
+        
+        activeOptions.forEach(opt => {
+            const colName = opt.value;
+            const isNumericInitial = currentColumns && currentColumns.numeric.includes(colName);
+            
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="fw-bold">${colName}</td>
+                <td>
+                    <select class="form-select form-select-sm curation-type" data-col="${colName}">
+                        <option value="numeric" ${isNumericInitial ? 'selected' : ''}>数値</option>
+                        <option value="categorical" ${!isNumericInitial ? 'selected' : ''}>カテゴリ (文字)</option>
+                    </select>
+                </td>
+                <td><input type="number" step="any" class="form-control form-control-sm curation-min" data-col="${colName}" placeholder="下限なし"></td>
+                <td><input type="number" step="any" class="form-control form-control-sm curation-max" data-col="${colName}" placeholder="上限なし"></td>
+                <td class="text-muted extra-small">自動補完対象</td>
+            `;
+            curationTableBody.appendChild(tr);
+        });
+    }
+
+    function moveSelected(targetList) {
+        [listExclude, listX, listY].forEach(list => {
+            if (list !== targetList) {
+                Array.from(list.selectedOptions).forEach(opt => { targetList.appendChild(opt); opt.selected = false; });
+            }
+        });
+        renderCurationTable();
+    }
+    document.getElementById('btnMoveExclude').addEventListener('click', () => moveSelected(listExclude));
+    document.getElementById('btnMoveX').addEventListener('click', () => moveSelected(listX));
+    document.getElementById('btnMoveY').addEventListener('click', () => moveSelected(listY));
+
+    generateBtn.addEventListener('click', function() {
+        const databaseSelect = document.getElementById('targetThemeSelect');
+        const selectedThemes = Array.from(databaseSelect.selectedOptions).map(opt => opt.value);
+        if (selectedThemes.length === 0) { alert('テーマを選択してください。'); return; }
+
+        generateBtn.disabled = true;
+        placeholder.innerHTML = '<span class="spinner-border text-primary"></span><p class="mt-2">生データを読み込んでいます...</p>';
+        placeholder.classList.remove('d-none');
+        previewContainer.style.display = 'none';
+        curationSection.style.display = 'none';
+        sideActionArea.style.display = 'none';
+        
+        fetch("{% url 'api_generate_mi_dataset' workspace.pk %}", {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+            body: JSON.stringify({ 
+                database_ids: selectedThemes,
+                imputation_method: 'none'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                placeholder.classList.add('d-none');
+                previewContainer.style.display = 'block';
+                previewContainer.innerHTML = data.html_table;
+
+                document.getElementById('dataCountBadge').textContent = data.total_rows + ' 件';
+                document.getElementById('dataCountBadge').classList.replace('bg-secondary', 'bg-success');
+                
+                curationSection.style.display = 'block';
+                sideActionArea.style.display = 'block';
+                currentColumns = data.columns;
+                
+                listExclude.innerHTML = ''; listX.innerHTML = ''; listY.innerHTML = '';
+                data.columns.all.forEach(col => {
+                    if (['テーマ名', 'Lot番号', '実験日', '担当者', '評価メモ'].includes(col)) return;
+                    listX.appendChild(new Option(col, col));
+                });
+                renderCurationTable();
+
+                // ★追加: データベースからこのテーマに紐づく過去のモデル一覧を取得
+                const databaseId = selectedThemes[0];
+                fetch(`/dept/{{ workspace.pk }}/api/model/list/?database_id=${databaseId}`)
+                .then(res => res.json())
+                .then(mData => {
+                    if(mData.status === 'success' && mData.models.length > 0) {
+                        fetchedModelsForRestore = mData.models;
+                        const select = document.getElementById('restoreModelSelect');
+                        select.innerHTML = mData.models.map(m => {
+                            const memo = m.preprocessing_meta.memo ? ` (${m.preprocessing_meta.memo})` : '';
+                            return `<option value="${m.id}">Y: ${m.target}${memo} - ${m.created_at}</option>`;
+                        }).join('');
+                        document.getElementById('restoreModelArea').classList.remove('d-none');
+                    } else {
+                        document.getElementById('restoreModelArea').classList.add('d-none');
+                    }
+                });
+
+            } else {
+                alert(data.message);
+            }
+        })
+        .finally(() => { generateBtn.disabled = false; });
+    });
+
+
+    // ★修正版: 選択したモデルの設定をUIに完全適用する処理（Yのマージ対応）
+    document.getElementById('applyModelConfigBtn').addEventListener('click', function() {
+        const modelId = parseInt(document.getElementById('restoreModelSelect').value);
+        const model = fetchedModelsForRestore.find(m => m.id === modelId);
+        if(!model) return;
+
+        const allOptions = [...Array.from(listX.options), ...Array.from(listY.options), ...Array.from(listExclude.options)];
+        const meta = model.preprocessing_meta || {};
+        const typeOverrides = meta.type_overrides || {};
+        
+        // 1. 現在画面で選ばれているYを取得（消えずに保護するため）
+        const currentYs = Array.from(listY.options).map(opt => String(opt.value).trim());
+        
+        // 2. 過去のモデルで 'target' (Y) として記録されていたものを取得
+        const savedYs = meta.saved_y_cols || [];
+        
+        // 3. 今のY、過去のY、モデル自身のYを全て合体させる（重複は排除）
+        const mergedYs = Array.from(new Set([...currentYs, ...savedYs, model.target]));
+
+        listX.innerHTML = ''; listY.innerHTML = ''; listExclude.innerHTML = '';
+        allOptions.forEach(opt => {
+            const val = String(opt.value).trim();
+            
+            // 合体したYリストに含まれていればYの箱へ
+            if(mergedYs.includes(val)) {
+                listY.appendChild(opt);
+            } 
+            // モデルの特徴量（X）に含まれていればXの箱へ
+            else if(model.features.some(f => String(f).trim() === val)) {
+                listX.appendChild(opt);
+            } 
+            // どちらでもなければ除外の箱へ
+            else {
+                listExclude.appendChild(opt);
+            }
+        });
+
+        renderCurationTable();
+
+        // Min/Max・属性の復元（DOM生成を待つため少し遅らせる）
+        setTimeout(() => {
+            // ローカルストレージの設定も合体（マージ）させる
+            let currentLocalOverrides = JSON.parse(localStorage.getItem('latest_type_overrides') || '{}');
+            for (const [col, type] of Object.entries(typeOverrides)) {
+                if (currentLocalOverrides[col] !== 'target') {
+                    currentLocalOverrides[col] = type;
+                }
+            }
+            mergedYs.forEach(y => currentLocalOverrides[y] = 'target');
+            localStorage.setItem('latest_type_overrides', JSON.stringify(currentLocalOverrides));
+
+            document.querySelectorAll('.curation-type').forEach(sel => {
+                const col = sel.dataset.col;
+                if(currentLocalOverrides[col]) sel.value = currentLocalOverrides[col];
+            });
+
+            const minMaxRules = meta.min_max_rules || [];
+            minMaxRules.forEach(rule => {
+                const minInput = document.querySelector(`.curation-min[data-col="${rule.col}"]`);
+                const maxInput = document.querySelector(`.curation-max[data-col="${rule.col}"]`);
+                if(minInput && rule.min !== null) minInput.value = rule.min;
+                if(maxInput && rule.max !== null) maxInput.value = rule.max;
+            });
+
+            if(meta.imputation_method) {
+                const impSelect = document.getElementById('finalImputationMethod');
+                if(impSelect) impSelect.value = meta.imputation_method;
+            }
+        }, 100);
+
+        alert(`モデル「${model.target}」の設定を復元し、現在のYと統合しました！\n確認して「最終生成して進む」を押してください。`);
+    });
+
+    document.getElementById('confirmCurationBtn').addEventListener('click', function() {
+        if (listY.options.length === 0) { alert('結果(Y)を最低1つは選択してください。'); return; }
+
+        const xCols = Array.from(listX.options).map(opt => opt.value);
+        const yCols = Array.from(listY.options).map(opt => opt.value);
+        const imputationMethod = document.getElementById('finalImputationMethod').value;
+        
+        const typeOverrides = {};
+        document.querySelectorAll('.curation-type').forEach(sel => {
+            typeOverrides[sel.dataset.col] = sel.value;
+        });
+
+        const minMaxRules = [];
+        document.querySelectorAll('#curationTableBody tr').forEach(tr => {
+            const colName = tr.querySelector('td:first-child').textContent.trim();
+            const minInput = tr.querySelector('.curation-min');
+            const maxInput = tr.querySelector('.curation-max');
+            if (minInput || maxInput) {
+                const minVal = minInput && minInput.value !== '' ? minInput.value : null;
+                const maxVal = maxInput && maxInput.value !== '' ? maxInput.value : null;
+                if (minVal !== null || maxVal !== null) {
+                    minMaxRules.push({ col: colName, min: minVal, max: maxVal });
+                }
+            }
+        });
+
+        // ★追加: Phase 3に引き継ぐためにLocalStorageに一時保存
+        localStorage.setItem('latest_type_overrides', JSON.stringify(typeOverrides));
+        localStorage.setItem('latest_min_max_rules', JSON.stringify(minMaxRules));
+        localStorage.setItem('latest_imputation', imputationMethod);
+
+        const btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> AIがデータを最適化中...';
+
+        fetch("{% url 'api_curate_dataset' workspace.pk %}", {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+            body: JSON.stringify({ 
+                x_cols: xCols, 
+                y_cols: yCols, 
+                type_overrides: typeOverrides,
+                min_max_rules: minMaxRules,
+                imputation_method: imputationMethod
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                alert(`データ浄化成功: ${data.final_rows} 件\n\n処理内容:\n${data.summary_message}`);
+
+                if (data.html_table) {
+                    document.getElementById('previewTableContainer').innerHTML = data.html_table;
+                    document.getElementById('dataCountBadge').textContent = data.final_rows + ' 件 (浄化・補完済)';
+                    document.getElementById('downloadCuratedBtn').classList.remove('d-none');
+                }
+
+                const targetBox = document.getElementById('targetRadios');
+                const featureBox = document.getElementById('featureCheckboxes');
+                if (targetBox && featureBox) {
+                    targetBox.innerHTML = yCols.map((col, idx) => `
+                        <div class="form-check">
+                            <input class="form-check-input target-radio" type="radio" name="target_variable" value="${col}" id="radio_${col}" ${idx === 0 ? 'checked' : ''}>
+                            <label class="form-check-label small" for="radio_${col}">${col}</label>
+                        </div>`).join('');
+
+                    featureBox.innerHTML = xCols.map(col => `
+                        <div class="form-check" id="feature_wrapper_${col}">
+                            <input class="form-check-input feature-chk" type="checkbox" name="feature_xs" value="${col}" id="chk_${col}" checked>
+                            <label class="form-check-label small" for="chk_${col}">${col}</label>
+                        </div>`).join('');
+                }
+                const drawBtn = document.getElementById('drawGraphsBtn');
+                if(drawBtn) drawBtn.disabled = false;
+
+                if (typeof window.initPhase3MultiMode === 'function') {
+                    window.initPhase3MultiMode(yCols, xCols);
+                }
+
+                ['explore-tab', 'modeling-tab'].forEach(tabId => {
+                    const tabEl = document.getElementById(tabId);
+                    if (tabEl) {
+                        tabEl.disabled = false;
+                        tabEl.classList.remove('disabled');
+                    }
+                });
+
+            } else {
+                alert('エラーが発生しました: ' + data.message);
+            }
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-play-fill"></i> 解析用データを最終生成して進む';
+        });
+    });
+});
+</script>

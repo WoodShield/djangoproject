@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'workspace_list' %}">ワークスペース一覧</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'database_list' database.workspace.pk %}">{{ database.workspace.name }}</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'lot_list' database.pk %}">{{ database.name }}</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'database_settings' database.pk %}">データ項目設定</a></li>
+    <li class="breadcrumb-item active" aria-current="page">項目名の取り込み</li>
+  </ol>
+</nav>
+
+<div class="row mb-4">
+    <div class="col">
+        <h2 class="fw-bold">Excel/CSVから項目名を抽出 <span class="fs-5 text-muted">({{ database.name }})</span></h2>
+        <p class="text-muted">ファイルの1行目（ヘッダー列）を読み込み、新しい項目として自動でリストに追加します。</p>
+    </div>
+</div>
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-danger">{{ message }}</div>
+    {% endfor %}
+{% endif %}
+
+<div class="card shadow-sm mb-4 border-success">
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="mb-4">
+                <label class="form-label fw-bold">{{ form.file.label }}</label>
+                {{ form.file }}
+                <div class="form-text text-muted">※データ行は読み込まず、1行目の列名だけを高速で抽出します。</div>
+            </div>
+            
+            <button type="submit" class="btn btn-success px-4">列名を抽出して追加</button>
+            <a href="{% url 'database_settings' database.pk %}" class="btn btn-outline-secondary ms-2">キャンセル</a>
+        </form>
+    </div>
+</div>
+
+<div class="alert alert-info">
+    <h5 class="fw-bold"><i class="bi bi-info-circle"></i> 読み込みルール</h5>
+    <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.9rem;">
+            <thead class="table-secondary">
+                <tr>
+                    <th class="text-danger">Lot番号 <span class="small fw-normal">(除外)</span></th>
+                    <th class="text-danger">実験日 <span class="small fw-normal">(除外)</span></th>
+                    <th class="text-success">材料1 <span class="small fw-normal">(データ項目)</span></th>
+                    <th class="text-success">温度(℃) <span class="small fw-normal">(データ項目)</span></th>
+                </tr>
+            </thead>
+    </table>
+    <ul class="mb-0">
+        <li><code>Lot番号</code>, <code>実験日</code>, <code>評価メモ</code>, <code>担当者</code> という列名が含まれていた場合は、基本情報であるため自動的に除外されます。</li>
+        <li>すでに設定画面に登録されている同じ名前の項目はスキップされます（上書きや重複はしません）。</li>
+        <li>取り込まれた項目は、<strong>一旦すべて「文字（短文）」の種類として仮登録されます。</strong>読み込み完了後に設定画面へ移動しますので、正しい種類（数字など）に変更して「保存」を押してください。</li>
+    </ul>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('input[type="file"]').forEach(el => el.classList.add('form-control'));
+    });
+</script>
+{% endblock content %}

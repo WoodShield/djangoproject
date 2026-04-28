@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'workspace_list' %}">ワークスペース一覧</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'database_list' database.workspace.pk %}">{{ database.workspace.name }}</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'lot_list' database.pk %}">{{ database.name }}</a></li>
+    <li class="breadcrumb-item active" aria-current="page">データ一括インポート</li>
+  </ol>
+</nav>
+
+<div class="row mb-4">
+    <div class="col">
+        <h2 class="fw-bold">データ一括インポート <span class="fs-5 text-muted">({{ database.name }})</span></h2>
+    </div>
+</div>
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-danger">{{ message }}</div>
+    {% endfor %}
+{% endif %}
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="mb-4">
+                <label class="form-label fw-bold">{{ form.file.label }}</label>
+                {{ form.file }}
+                <div class="form-text text-muted">{{ form.file.help_text }}</div>
+            </div>
+            
+            <button type="submit" class="btn btn-primary px-4">インポート実行</button>
+            <a href="{% url 'lot_list' database.pk %}" class="btn btn-outline-secondary ms-2">キャンセル</a>
+        </form>
+    </div>
+</div>
+
+<div class="alert alert-info shadow-sm">
+    <h5 class="fw-bold mb-3"><i class="bi bi-info-circle"></i> Excel/CSVの書き方イメージ</h5>
+    <p class="mb-2">1行目（ヘッダー）に項目名を書き、2行目以降にデータを入力してください。列名はシステムの設定と完全に一致させる必要があります。</p>
+    
+    <div class="table-responsive mb-3 bg-white border rounded">
+        <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.9rem;">
+            <thead class="table-secondary">
+                <tr>
+                    <th class="text-danger">Lot番号 <span class="small fw-normal">(必須)</span></th>
+                    <th class="text-primary">実験日 <span class="small fw-normal">(任意)</span></th>
+                    <th class="text-primary">評価メモ <span class="small fw-normal">(任意)</span></th>
+                    <th class="text-success">材料1 <span class="small fw-normal">(データ項目)</span></th>
+                    <th class="text-success">温度(℃) <span class="small fw-normal">(データ項目)</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>LOT-001</td>
+                    <td>2026/04/01</td>
+                    <td>初期テスト</td>
+                    <td>水</td>
+                    <td>25.5</td>
+                </tr>
+                <tr>
+                    <td>LOT-002</td>
+                    <td>2026/04/02</td>
+                    <td class="text-muted small">(空欄でもOK)</td>
+                    <td>アルコール</td>
+                    <td>30.0</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <ul class="mb-2">
+        <li><strong>必須列：</strong> <code>Lot番号</code></li>
+        <li><strong>任意列：</strong> <code>実験日</code>, <code>評価メモ</code></li>
+        <li><strong>データ列：</strong> 設定画面で作った項目名に合わせてください。すべての項目名を書く必要はありません！「インポートしたい項目（列）」だけで大丈夫です。</li>
+        <li><strong>データの照合と更新：</strong>登録されているLot番号の場合：Excelに書いてある項目 ＝ Excelの数値に上書き。Excelに書いていない項目 ＝ 既存のデータが維持（消えません！）。</li>
+    </ul>
+    <p class="mb-0 text-muted small">
+        ※システムに設定されていない列名が含まれていても無視されるためエラーにはなりません。<br>
+        ※「計算（自動算出）」に設定した列はシステムが裏側で計算するためインポート不要です。
+    </p>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('input[type="file"]').forEach(el => el.classList.add('form-control'));
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,171 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'department_list' %}">ワークスペース一覧</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'theme_list' department.pk %}">{{ department.name }}</a></li>
+        <li class="breadcrumb-item active" aria-current="page">MIデータ解析</li>
+    </ol>
+</nav>
+
+<div class="row mb-3">
+    <div class="col">
+        <h2 class="fw-bold"><i class="bi bi-cpu text-info"></i> MI・プロセス解析エンジン</h2>
+        <p class="text-muted">複数テーマの統合、多変数同時予測、および目標物性からの配合逆解析を行います。</p>
+    </div>
+</div>
+
+<ul class="nav nav-pills nav-fill mb-4 shadow-sm bg-white p-2 rounded" id="analysisTab" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active fw-bold" id="dataset-tab" data-bs-toggle="tab" data-bs-target="#dataset" type="button" role="tab"><i class="bi bi-database-fill-add"></i> 1. データ準備</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link fw-bold" id="explore-tab" data-bs-toggle="tab" data-bs-target="#explore" type="button" role="tab"><i class="bi bi-graph-up"></i> 2. 可視化・相関</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link fw-bold" id="modeling-tab" data-bs-toggle="tab" data-bs-target="#modeling" type="button" role="tab"><i class="bi bi-magic"></i> 3. モデル学習</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link fw-bold" id="simulation-tab" data-bs-toggle="tab" data-bs-target="#simulation" type="button" role="tab"><i class="bi bi-calculator-fill"></i> 4. 逆解析・最適化</button>
+    </li>
+</ul>
+
+<div class="tab-content" id="analysisTabContent">
+    <div class="tab-pane fade show active" id="dataset" role="tabpanel">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card shadow-sm border-0 mb-4">
+                    <div class="card-header bg-light fw-bold"><i class="bi bi-sliders"></i> 解析スコープの設定</div>
+                    <div class="card-body">
+                        <form id="analysisConfigForm">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small">対象データベース（複数選択可）</label>
+                                <select class="form-select" id="targetThemeSelect" multiple style="height: 120px;">
+                                    {% for theme in themes %}
+                                        <option value="{{ theme.pk }}">{{ theme.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">MI分析では類似テーマの結合が推奨されます。</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small">解析モード</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="mode" id="modeSingle" checked>
+                                    <label class="form-check-label small" for="modeSingle">単一目的変数 (通常予測)</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="mode" id="modeMulti">
+                                    <label class="form-check-label small" for="modeMulti">複数目的変数 (MI/多変量解析)</label>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-primary w-100 fw-bold">データを読み込む</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body bg-light rounded d-flex align-items-center justify-content-center border">
+                        <div class="text-center text-muted">
+                            <i class="bi bi-table fs-1"></i>
+                            <p class="mt-2">データが読み込まれると、ここに解析用データセットのプレビューが表示されます。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-pane fade" id="explore" role="tabpanel">
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-distribute-vertical display-4 text-muted"></i>
+                <h5 class="mt-3">変数間の相関・寄与度分析</h5>
+                <p class="text-muted">ヒートマップや重要度プロットが表示されます。</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-pane fade" id="modeling" role="tabpanel">
+        <div class="row">
+            <div class="col-md-5">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-light fw-bold">説明変数(X)と目的変数(Y)の選定</div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-6">
+                                <label class="small fw-bold">説明変数 (Input)</label>
+                                <div class="border rounded p-2 bg-light" style="height: 200px; overflow-y: auto;">
+                                    <div class="form-check small"><input class="form-check-input" type="checkbox"> 反応温度</div>
+                                    <div class="form-check small"><input class="form-check-input" type="checkbox"> 攪拌速度</div>
+                                    <div class="form-check small"><input class="form-check-input" type="checkbox"> 添加量_A</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <label class="small fw-bold text-primary">目的変数 (Target)</label>
+                                <div class="border rounded p-2 bg-light" style="height: 200px; overflow-y: auto;">
+                                    <div class="form-check small"><input class="form-check-input" type="checkbox"> 純度(%)</div>
+                                    <div class="form-check small"><input class="form-check-input" type="checkbox"> 粘度(mPa・s)</div>
+                                    <div class="form-check small"><input class="form-check-input" type="checkbox"> 色相</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <label class="form-label small fw-bold">アルゴリズム</label>
+                            <select class="form-select form-select-sm">
+                                <option>Random Forest Regression</option>
+                                <option>Gradient Boosting (XGBoost)</option>
+                                <option>Gaussian Process (MIに推奨)</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-info text-white w-100 mt-3 fw-bold">学習開始</button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-7">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body text-center py-5">
+                        <p class="text-muted">モデルの学習結果（$R^2$スコア、誤差分布）がここに表示されます。</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-pane fade" id="simulation" role="tabpanel">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card border-primary shadow-sm mb-4">
+                    <div class="card-header bg-primary text-white fw-bold">目標物性の設定 (Inverse Design)</div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">目標 純度(%)</label>
+                            <input type="number" class="form-control form-control-sm" placeholder="例: 98.0">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">目標 粘度(mPa・s)</label>
+                            <div class="input-group input-group-sm">
+                                <input type="number" class="form-control" placeholder="Min">
+                                <span class="input-group-text">〜</span>
+                                <input type="number" class="form-control" placeholder="Max">
+                            </div>
+                        </div>
+                        <button class="btn btn-primary w-100 fw-bold"><i class="bi bi-search"></i> 最適配分を算出</button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-success text-white fw-bold">AI推奨の製造条件・配合</div>
+                    <div class="card-body">
+                        <div class="alert alert-info">
+                            <i class="bi bi-lightbulb-fill"></i> 目標値を入力して算出を押すと、確立された予測モデルに基づいて最適な配合比率とプロセス条件が提案されます。
+                        </div>
+                        </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

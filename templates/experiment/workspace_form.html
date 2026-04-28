@@ -1,0 +1,139 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'workspace_list' %}">ワークスペース一覧</a></li>
+        <li class="breadcrumb-item active" aria-current="page">
+            {% if form.instance.pk %}ワークスペースの編集{% else %}新規作成{% endif %}
+        </li>
+    </ol>
+</nav>
+
+<div class="row mb-4">
+    <div class="col">
+        <h2 class="fw-bold">
+            {% if form.instance.pk %}
+                <i class="bi bi-pencil-square text-primary"></i> ワークスペースの編集
+            {% else %}
+                <i class="bi bi-building-add text-success"></i> ワークスペースの作成
+            {% endif %}
+        </h2>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 col-md-8 mx-auto">
+    <div class="card-body p-4">
+        <form method="post">
+            {% csrf_token %}
+            
+            <div class="mb-4">
+                <label class="form-label fw-bold">{{ form.name.label }}</label>
+                {{ form.name }}
+                <div class="text-danger small mt-1">{{ form.name.errors.0 }}</div>
+                <div class="form-text">例：開発1部 第2グループ、品質管理部 など</div>
+            </div>
+
+            <div class="alert alert-secondary py-2 mt-4 mb-3">
+                <i class="bi bi-shield-lock"></i> <strong>アクセス権限設定</strong>
+            </div>
+            <div class="form-text mb-4 text-danger fw-bold">
+                ※どちらも「許可済み」が空（ゼロ）の場合は、制限なし（全ユーザー公開）となります。
+            </div>
+
+            <div class="mb-4 p-3 bg-white border rounded shadow-sm">
+                <label class="form-label fw-bold text-secondary mb-2"><i class="bi bi-building"></i> 許可する部署</label>
+                <div class="row align-items-center">
+                    <div class="col-5">
+                        <div class="text-muted small mb-1">選択可能</div>
+                        <select id="available_id_allowed_orgs" multiple class="form-select bg-light" size="6"></select>
+                    </div>
+                    <div class="col-2 text-center px-1">
+                        <button type="button" class="btn btn-outline-primary btn-sm mb-2 w-100 fw-bold" onclick="moveOptions('available_id_allowed_orgs', 'id_allowed_orgs')">追加 &raquo;</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm w-100" onclick="moveOptions('id_allowed_orgs', 'available_id_allowed_orgs')">&laquo; 解除</button>
+                    </div>
+                    <div class="col-5">
+                        <div class="text-success small fw-bold mb-1">許可済み（ここに入れた部署だけがアクセス可能）</div>
+                        {{ form.allowed_orgs }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-3 p-3 bg-white border rounded shadow-sm">
+                <label class="form-label fw-bold text-secondary mb-2"><i class="bi bi-person"></i> 許可するユーザー（個人単位での特別許可）</label>
+                <div class="row align-items-center">
+                    <div class="col-5">
+                        <div class="text-muted small mb-1">選択可能</div>
+                        <select id="available_id_allowed_users" multiple class="form-select bg-light" size="6"></select>
+                    </div>
+                    <div class="col-2 text-center px-1">
+                        <button type="button" class="btn btn-outline-primary btn-sm mb-2 w-100 fw-bold" onclick="moveOptions('available_id_allowed_users', 'id_allowed_users')">追加 &raquo;</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm w-100" onclick="moveOptions('id_allowed_users', 'available_id_allowed_users')">&laquo; 解除</button>
+                    </div>
+                    <div class="col-5">
+                        <div class="text-success small fw-bold mb-1">許可済み（ここに入れた人はアクセス可能）</div>
+                        {{ form.allowed_users }}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="text-end border-top pt-3">
+                <a href="javascript:history.back()" class="btn btn-secondary me-2">キャンセル</a>
+                <button type="submit" class="btn btn-primary fw-bold px-4">
+                    {% if form.instance.pk %}変更を保存{% else %}作成する{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // フォームのデザインをBootstrapに合わせる
+    document.querySelectorAll('input[type="text"]').forEach(el => {
+        el.classList.add('form-control');
+        el.setAttribute('placeholder', 'ワークスペース名を入力');
+    });
+    // 左右振り分けUIの初期化関数
+    function initDualList(fieldId) {
+        const rightBox = document.getElementById(fieldId);
+        const leftBox = document.getElementById('available_' + fieldId);
+        if (!rightBox || !leftBox) return;
+
+        // 初期表示時：右側にある「未選択」の項目を左側（選択可能）に移動させる
+        Array.from(rightBox.options).forEach(opt => {
+            if (!opt.selected) {
+                leftBox.appendChild(opt);
+            }
+        });
+
+        // 【最重要】フォーム送信時に、右側にある項目を「すべて選択状態」にしてDjangoに送る
+        rightBox.closest('form').addEventListener('submit', function() {
+            Array.from(rightBox.options).forEach(opt => opt.selected = true);
+        });
+    }
+
+    // 部署とユーザーのフィールドを初期化
+    initDualList('id_allowed_orgs');
+    initDualList('id_allowed_users');
+});
+
+// 中央のボタンを押した時の移動アニメーション（要素の移動）処理
+function moveOptions(fromId, toId) {
+    const fromBox = document.getElementById(fromId);
+    const toBox = document.getElementById(toId);
+    
+    // 選択されている要素をループで回して逆のボックスへ移動
+    Array.from(fromBox.selectedOptions).forEach(opt => {
+        opt.selected = false; // 移動直後は青いハイライトを消す
+        toBox.appendChild(opt);
+    });
+}
+
+
+
+
+
+</script>
+
+{% endblock content %}

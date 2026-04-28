@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 mt-4">
+        <h3 class="fw-bold mb-3"><i class="bi bi-building-add text-primary"></i> 部署（組織）の新規登録</h3>
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">部署・組織名</label>
+                        {{ form.name }}
+                        <div class="form-text text-dark mt-3">
+                            登録したい部署やグループの正式名称を入力してください。<br><br>
+                            <h6>命名法則：部署名＋課名</h6>
+                            例：機能材開発部開発1課、素材技術部開発課など
+                        </div>
+                    </div>
+
+                    <div class="text-end">
+                        <a href="{% url 'mypage' %}" class="btn btn-secondary me-2">キャンセル</a>
+                        <button type="submit" class="btn btn-primary fw-bold px-4">登録する</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('input[type="text"]').forEach(el => {
+            el.classList.add('form-control');
+            el.setAttribute('placeholder', '部署名を入力　【命名法則：部署名＋課名】');
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,208 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'workspace_list' %}">ワークスペース一覧</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'database_list' database.workspace.pk %}">{{ database.workspace.name }}</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'lot_list' database.pk %}">{{ database.name }}</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{% if object %}データ編集{% else %}新規データ登録{% endif %}</li>
+  </ol>
+</nav>
+
+<div class="row mb-4">
+    <div class="col">
+        <h2 class="fw-bold">
+            {% if object %}
+                <i class="bi bi-pencil-square text-primary"></i> データ編集 <span class="fs-5 text-muted">(Lot: {{ object.lot_number }})</span>
+            {% else %}
+                <i class="bi bi-plus-square text-success"></i> 新規データ登録 <span class="fs-5 text-muted">({{ database.name }})</span>
+            {% endif %}
+        </h2>
+    </div>
+</div>
+
+{% if not object %}
+<div class="col-md-10 col-lg-8 mx-auto mb-3 text-end">
+    <a href="{% url 'lot_import' database.pk %}" class="btn btn-outline-success fw-bold shadow-sm">
+        <i class="bi bi-file-earmark-spreadsheet"></i> Excel / CSV から一括登録する
+    </a>
+</div>
+{% endif %}
+
+
+
+<div class="card shadow-sm border-0 col-md-10 col-lg-8 mx-auto mb-5">
+    <div class="card-body p-4">
+        
+        {% if form.instance.pk %}
+            {% if form.instance.ai_anomaly_msg and not form.instance.is_anomaly_acknowledged %}
+            <div class="alert alert-danger shadow-sm mb-4">
+                <h5 class="alert-heading fw-bold"><i class="bi bi-exclamation-triangle-fill"></i> AIによる異常検知</h5>
+                <p class="mb-0">{{ form.instance.ai_anomaly_msg }}</p>
+                <hr>
+                <p class="mb-0 small text-muted">※下部のフォームで数値を修正して保存するか、「問題なしとして非表示」にチェックを入れて保存してください。</p>
+            </div>
+            {% endif %}
+        {% endif %}
+
+        <form method="post" id="lotForm" enctype="multipart/form-data">
+            {% csrf_token %}
+            
+            {% for field in form %}
+                {% if field.name != 'is_anomaly_acknowledged' and field.name != 'is_similarity_acknowledged' %}
+                <div class="mb-3">
+                    <label class="form-label fw-bold">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.help_text %}<div class="form-text">{{ field.help_text|safe }}</div>{% endif %}
+                    
+                    {% if field.field.existing_images %}
+                    <div class="mt-2 p-2 border rounded bg-light">
+                        <span class="small fw-bold text-muted d-block mb-2"><i class="bi bi-images"></i> 現在の保存済み画像（チェックして保存で削除）:</span>
+                        <div class="d-flex flex-wrap gap-2">
+                        {% for img_path in field.field.existing_images %}
+                            <div class="card p-1 text-center shadow-sm" style="width: 140px;">
+                                <a href="/media/{{ img_path }}" target="_blank" class="text-decoration-none">
+                                    <img src="/media/{{ img_path }}" class="card-img-top rounded" style="height: 70px; object-fit: contain; background-color: #fff;">
+                                </a>
+                                <div class="card-body p-1 mt-1 border-top">
+                                    <div class="form-check text-start mb-0">
+                                        <input class="form-check-input" type="checkbox" name="delete_image_{{ field.name }}" value="{{ img_path }}" id="del_{{ img_path|urlencode }}">
+                                        <label class="form-check-label small text-danger fw-bold" for="del_{{ img_path|urlencode }}" style="cursor:pointer;">
+                                            <i class="bi bi-trash3-fill"></i> 削除する
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    </div>
+                {% endif %}
+            {% endfor %}
+
+            {% if form.is_anomaly_acknowledged %}
+            <div class="card border-warning mb-4 mt-4 shadow-sm">
+                <div class="card-body">
+                    <h6 class="fw-bold text-dark mb-3"><i class="bi bi-robot text-primary"></i> AI判定の確認</h6>
+                    <div class="form-check">
+                        {{ form.is_anomaly_acknowledged }}
+                        <label class="form-check-label fw-bold text-dark" for="{{ form.is_anomaly_acknowledged.id_for_label }}">
+                            {{ form.is_anomaly_acknowledged.label }}
+                        </label>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="text-end mt-4">
+                <a href="{% url 'lot_list' database.pk %}" class="btn btn-secondary me-2 px-4">キャンセル</a>
+                <button type="submit" class="btn btn-primary fw-bold px-4">
+                    {% if object %}変更を保存{% else %}データを登録{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const inputs = document.querySelectorAll('input[type="text"], input[type="number"], input[type="date"], select, textarea');
+    inputs.forEach(input => input.classList.add('form-control'));
+    const checks = document.querySelectorAll('input[type="checkbox"]');
+    checks.forEach(check => check.classList.add('form-check-input'));
+
+    const calcFields = document.querySelectorAll('input[data-formula]');
+    
+    function performCalculations() {
+        let changed = true;
+        let loopCount = 0;
+        const MAX_LOOPS = 5;
+
+        while (changed && loopCount < MAX_LOOPS) {
+            changed = false;
+            loopCount++;
+
+            calcFields.forEach(calcField => {
+                let formula = calcField.getAttribute('data-formula');
+                const regex = /\{([^}]+)\}/g;
+                let isComputable = true;
+                let parsedFormula = formula;
+                let match;
+                
+                while ((match = regex.exec(formula)) !== null) {
+                    const baseName = match[1]; // 例: "混合原料配合量（ｇ）"
+                    
+                    // 1. まず "dynamic_xxx" の名前で探す
+                    let inputElement = document.querySelector(`[name="dynamic_${baseName}"]`);
+                    
+                    // 2. 見つからなければ、そのままの "xxx" の名前で探す（★今回の修正ポイント）
+                    if (!inputElement) {
+                        inputElement = document.querySelector(`[name="${baseName}"]`);
+                    }
+                    
+                    if (!inputElement) {
+                        console.warn(`[計算待機] 項目が見つかりません: ${baseName}`);
+                        isComputable = false;
+                        break;
+                    }
+
+                    // カンマ等を除去。空欄の場合は「0」として扱う
+                    let rawValue = inputElement.value.replace(/,/g, '').trim();
+                    if (rawValue === '') {
+                        rawValue = '0';
+                    }
+
+                    if (!isNaN(rawValue)) {
+                        parsedFormula = parsedFormula.replace(match[0], `(${rawValue})`);
+                    } else { 
+                        isComputable = false; 
+                        break; 
+                    }
+                }
+
+                let newValue = "";
+                if (isComputable) {
+                    try {
+                        const result = math.evaluate(parsedFormula);
+                        // 0割などでInfinityやNaNになった場合は、エラーにせず空欄のまま待機
+                        if (!isFinite(result) || isNaN(result)) {
+                            newValue = "";
+                        } else {
+                            // 小数第4位で丸める
+                            newValue = Math.round(result * 10000) / 10000; 
+                        }
+                        console.log(`[計算完了] ${formula} = ${newValue}`); // 確認用ログ
+                    } catch (e) { 
+                        newValue = ""; 
+                    }
+                }
+
+                if (String(calcField.value) !== String(newValue)) {
+                    calcField.value = newValue;
+                    changed = true; 
+                }
+            });
+        }
+    }
+
+    let calcTimeout;
+    function triggerCalculations() {
+        clearTimeout(calcTimeout);
+        // 入力の手が止まってから 400ミリ秒後に計算を実行
+        calcTimeout = setTimeout(performCalculations, 400); 
+    }
+
+    // ★修正ポイント：dynamic_に限定せず、画面上のすべてのテキスト・数値入力欄の変更を監視する
+    document.querySelectorAll('input[type="text"], input[type="number"]').forEach(i => {
+        i.addEventListener('input', triggerCalculations);
+        i.addEventListener('change', triggerCalculations);
+    });
+
+    // 画面を開いた時の初期計算
+    performCalculations();
+});
+</script>
+{% endblock content %}

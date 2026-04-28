@@ -1,0 +1,313 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'workspace_list' %}">ワークスペース一覧</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'database_list' object.workspace.pk %}">{{ object.workspace.name }}</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'lot_list' object.pk %}">{{ object.name }}</a></li>
+        <li class="breadcrumb-item active" aria-current="page">データ項目設定</li>
+    </ol>
+</nav>
+
+<div class="row mb-4">
+    <div class="col">
+        <h2 class="fw-bold">{{ object.name }} - データ項目設定</h2>
+    </div>
+</div>
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-success{% endif %} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    {% endfor %}
+{% endif %}
+
+<form method="post" id="settingsForm">
+    {% csrf_token %}
+    
+    <div class="card shadow-sm mb-4 border-primary">
+        <div class="card-header bg-primary text-white fw-bold">システム基本設定</div>
+        <div class="card-body">
+            
+            <div class="mb-3">
+                <div class="form-check">
+                    {{ form.enable_anomaly_check }}
+                    <label class="form-check-label fw-bold text-dark" for="{{ form.enable_anomaly_check.id_for_label }}">
+                        入力異常検知を有効にする（3シグマ法による桁間違いや外れ値の警告を出します）
+                    </label>
+                </div>
+            </div>
+
+            <div class="bg-light p-3 rounded mt-2 text-dark border shadow-sm" style="font-size: 0.9rem;">
+                <strong><i class="bi bi-robot text-primary"></i> AI機能（異常検知）の適用範囲について：</strong><br>
+                データベースの設定で異常検知機能を有効にし、下の表の「異常検知」列のチェックボックスで設定している項目がチェック対象になります。
+            </div>
+            
+            <hr class="my-4 text-secondary"> 
+
+            <div class="px-2">
+                <h6 class="fw-bold mb-3 text-dark"><i class="bi bi-info-circle"></i> 設定時のポイント</h6>
+                <ul class="mb-0 text-dark">
+                    <li class="mb-3">
+                        <strong>登録不要な標準項目：</strong><br>
+                        <span class="text-muted"><strong><code>Lot番号</code>、<code>実験日</code>、<code>担当者</code>、<code>評価メモ（備考）</code> </strong>は最初から備わっているため、下の表で追加する必要はありません。</span>
+                    </li>
+                    
+                    <li class="mb-3">
+                        <strong>「入力画面に表示」について</strong><br>
+                        <span class="mt-1 text-muted small">
+                            <strong>チェックを外して保存：</strong> 新規登録画面の入力欄からだけ消えます。過去のデータは安全に残り、一覧などで引き続き確認できます。
+                        </span>
+                    </li>
+                    <li class="mb-2">
+                        <strong class="text-danger">⚠️「削除」について⚠️ (基本的に使用しないでください)</strong><br>
+                        <span class="mt-1 text-muted small">   
+                            <strong>削除にチェックを入れて保存：</strong> 項目の設定自体を完全に削除します。過去のデータも画面で見えなくなってしまうためご注意ください。
+                        </span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4 ">
+        <div class="card-header bg-light fw-bold py-2 d-flex align-items-center">
+            <span class="me-3">データ項目の定義</span>
+            <a href="{% url 'database_item_import' object.pk %}" class="btn btn-sm btn-success text-white shadow-sm">
+                📁 Excelから項目名を自動抽出する
+            </a>
+        </div>
+        <div class="card-body p-0">
+            {{ item_formset.management_form }}
+            <table class="table table-sm table-bordered mb-0">
+                <thead class="table-light text-nowrap">
+                    <tr>
+                        <th class="text-center align-middle" style="width: 80px;">並び順</th>
+                        <th class="align-middle">項目名</th>
+                        <th class="align-middle">データの種類</th>
+                        <th class="align-middle">選択肢(カンマ区切り)</th>
+                        <th class="align-middle text-nowrap">
+                            計算式
+                            <button type="button" class="btn btn-sm btn-dark text-white ms-2 py-0 px-2 fw-bold" data-bs-toggle="modal" data-bs-target="#formulaHelpModal">
+                                計算式書き方
+                            </button>
+                        </th>
+                        <th class="text-center align-middle">異常検知</th>
+                        <th class="text-center align-middle">入力表示</th>
+                        <th class="text-center align-middle">削除</th>
+                    </tr>
+                </thead>
+                <tbody id="item-tbody">
+                    {% for item_form in item_formset %}
+                    <tr class="item-row">
+                        <td class="text-center align-middle">
+                            <button type="button" class="btn btn-sm btn-outline-secondary move-up py-0">▲</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary move-down py-0">▼</button>
+                            <div class="d-none">{{ item_form.id }}{{ item_form.order }}</div>
+                        </td>
+                        <td class="align-middle">{{ item_form.item_name }}</td>
+                        <td class="align-middle">{{ item_form.data_type }}</td>
+                        <td class="align-middle">{{ item_form.choices_text }}</td>
+                        <td class="align-middle">{{ item_form.calculation_formula }}</td> 
+                        <td class="text-center align-middle">{{ item_form.use_for_anomaly }}</td>
+                        <td class="text-center align-middle">{{ item_form.is_active }}</td>
+                        <td class="text-center align-middle">{{ item_form.DELETE }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="mb-5 bg-light p-3 border rounded text-end">
+        <a href="{% url 'lot_list' object.pk %}" class="btn btn-link text-secondary me-3 text-decoration-none">キャンセル</a>
+        
+        <input type="hidden" name="submit_action" id="submitAction" value="continue">
+        
+        <button type="submit" class="btn btn-success btn-lg px-4 me-2" onclick="document.getElementById('submitAction').value='continue';">保存して次の項目を追加</button>
+        <button type="submit" class="btn btn-primary btn-lg px-4" onclick="document.getElementById('submitAction').value='return';">保存してデータ一覧に戻る</button>
+    </div>
+</form>
+
+<div class="modal fade" id="formulaHelpModal" tabindex="-1" aria-labelledby="formulaHelpModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content shadow-lg">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fw-bold" id="formulaHelpModalLabel"><i class="bi bi-calculator"></i> 演算子・関数リファレンス</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 text-dark">
+                <section class="mb-4">
+                    <h6 class="fw-bold border-bottom pb-2 mb-3"><i class="bi bi-hash"></i> 基本ルール</h6>
+                    <ul>
+                        <li>他項目の値を参照するには、項目名を <strong><code>{項目名}</code></strong> のように中括弧で囲みます。</li>
+                        <li><strong>重要：</strong> 参照する項目は、データの種類を「数値」または「自動計算(数値)」に設定している必要があります。</li>
+                    </ul>
+                </section>
+
+                <section class="mb-4">
+                    <h6 class="fw-bold border-bottom pb-2 mb-3 text-primary"><i class="bi bi-list-columns"></i> 使用可能な演算子・関数一覧</h6>
+                    <table class="table table-sm table-bordered align-middle bg-white">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 20%;" class="text-center">分類</th>
+                                <th style="width: 25%;" class="text-center">機能</th>
+                                <th>書き方（入力例）</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td rowspan="4" class="fw-bold text-center">四則演算</td>
+                                <td>足し算</td>
+                                <td><code>{項目A} + {項目B}</code></td>
+                            </tr>
+                            <tr>
+                                <td>引き算</td>
+                                <td><code>{項目A} - {項目B}</code></td>
+                            </tr>
+                            <tr>
+                                <td>掛け算 (乗算)</td>
+                                <td><code>{項目A} * {項目B}</code></td>
+                            </tr>
+                            <tr>
+                                <td>割り算 (除算)</td>
+                                <td><code>{項目A} / {項目B}</code></td>
+                            </tr>
+                            
+                            <tr>
+                                <td rowspan="2" class="fw-bold text-center">べき乗・ルート</td>
+                                <td>べき乗 (N乗)</td>
+                                <td><code>{項目}^2</code> <span class="small text-muted">（例: 2乗なら^2, 3乗なら^3）</span></td>
+                            </tr>
+                            <tr>
+                                <td>平方根 (ルート)</td>
+                                <td><code>sqrt({項目})</code></td>
+                            </tr>
+
+                            <tr>
+                                <td rowspan="3" class="fw-bold text-center">数学関数</td>
+                                <td>絶対値</td>
+                                <td><code>abs({項目})</code></td>
+                            </tr>
+                            <tr>
+                                <td>対数</td>
+                                <td>
+                                    <code>log({項目})</code> <span class="small text-muted">（自然対数 ln）</span><br>
+                                    <code>log10({項目})</code> <span class="small text-muted">（常用対数）</span>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>三角関数</td>
+                                <td>
+                                    <code>sin({項目})</code>, <code>cos({項目})</code>, <code>tan({項目})</code><br>
+                                    <span class="small text-muted">※角度の単位はラジアン(rad)として計算されます</span>
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <td rowspan="2" class="fw-bold text-center">定数</td>
+                                <td>円周率 (π)</td>
+                                <td><code>pi</code> <span class="small text-muted">（例: {半径}^2 * pi）</span></td>
+                            </tr>
+                            <tr>
+                                <td>ネイピア数 (e)</td>
+                                <td><code>e</code></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </section>
+
+                <section>
+                    <h6 class="fw-bold border-bottom pb-2 mb-3"><i class="bi bi-check2-circle"></i> 注意事項</h6>
+                    <p class="small text-muted mb-0">
+                        ・関数名や定数（<code>sqrt</code>, <code>pi</code>など）は、必ず<strong>半角英小文字</strong>で入力してください。<br>
+                        ・カッコ <code>()</code> を使って計算の優先順位を指定できます。例： <code>({A} + {B}) * {C}</code><br>
+                        ・0で割る（ゼロ除算）が発生した場合や、数式が間違っている場合は「計算エラー」と表示されます。
+                    </p>
+                </section>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary fw-bold" data-bs-dismiss="modal">閉じる</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const tbody = document.getElementById('item-tbody');
+
+    // 並び順の更新ロジック
+    function updateOrder() {
+        const rows = tbody.querySelectorAll('tr.item-row');
+        let orderIndex = 0;
+        rows.forEach((row) => {
+            const idInput = row.querySelector('input[name$="-id"]'); 
+            const itemNameInput = row.querySelector('input[name$="-item_name"]'); 
+            const orderInput = row.querySelector('input[name$="-order"]'); 
+            
+            if ((idInput && idInput.value) || (itemNameInput && itemNameInput.value.trim() !== '')) {
+                if (orderInput) orderInput.value = orderIndex;
+                orderIndex++;
+            } else {
+                if (orderInput) orderInput.value = ''; // 空行は番号も空にする
+            }
+        });
+    }
+
+    // 行の上下移動ボタン
+    tbody.addEventListener('click', function(e) {
+        if (e.target.classList.contains('move-up')) {
+            const row = e.target.closest('tr.item-row');
+            if (row.previousElementSibling) { tbody.insertBefore(row, row.previousElementSibling); updateOrder(); }
+        } else if (e.target.classList.contains('move-down')) {
+            const row = e.target.closest('tr.item-row');
+            if (row.nextElementSibling) { tbody.insertBefore(row.nextElementSibling, row); updateOrder(); }
+        }
+    });
+    
+    // 初回読み込み時の計算
+    updateOrder();
+
+    // 保存時の確認と、空行の送信ブロック
+    const settingsForm = document.getElementById('settingsForm');
+    settingsForm.addEventListener('submit', function(e) {
+        if (!confirm('設定を保存します。よろしいですか？')) {
+            e.preventDefault();
+            return;
+        }
+
+        // 送信直前に必ず並び順を再計算する
+        updateOrder();
+
+        // ＝＝＝ ★最終修正: 不要な行を削除し、Djangoに予定行数を伝える ＝＝＝
+        const rows = tbody.querySelectorAll('tr.item-row');
+        let validRowCount = 0; // 実際に送信する有効な行の数
+        
+        rows.forEach(row => {
+            const idInput = row.querySelector('input[name$="-id"]');
+            const itemNameInput = row.querySelector('input[name$="-item_name"]');
+            
+            // IDがなく（新規）、かつ項目名も空っぽの行の場合
+            if ((!idInput || !idInput.value) && (!itemNameInput || itemNameInput.value.trim() === '')) {
+                // disabledにするのではなく、行そのものをDOMから完全に削除する
+                row.remove();
+            } else {
+                // 有効な行としてカウント
+                validRowCount++;
+            }
+        });
+
+        // DjangoのFormSetが管理している「TOTAL_FORMS（送信予定の総行数）」を探して、有効な行数に上書きする
+        const totalFormsInput = document.querySelector('input[id$="-TOTAL_FORMS"]');
+        if (totalFormsInput) {
+            totalFormsInput.value = validRowCount;
+        }
+        // ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+    });
+});
+</script>
+{% endblock content %}

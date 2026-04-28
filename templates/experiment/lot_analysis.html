@@ -1,0 +1,784 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block content %}
+<style>
+    /* 下側のスクロールバーを非表示にするための設定 */
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* --- 行列の完全固定（Sticky） --- */
+    .sticky-header { position: sticky; top: -1px; z-index: 10; background-color: #f8f9fa !important; box-shadow: 0 1px 0 #dee2e6; }
+    .sticky-col1 { position: sticky; left: -1px; z-index: 5; background-color: #ffffff; min-width: 60px; max-width: 60px; border-right: 1px solid #dee2e6 !important; }
+    .sticky-col2 { position: sticky; left: 58px; z-index: 5; background-color: #ffffff; min-width: 150px; max-width: 150px; border-right: 2px solid #dee2e6 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sticky-top-left1 { position: sticky; top: -1px; left: -1px; z-index: 20; background-color: #f8f9fa !important; min-width: 60px; max-width: 60px; border-right: 1px solid #dee2e6 !important; box-shadow: 0 1px 0 #dee2e6; }
+    .sticky-top-left2 { position: sticky; top: -1px; left: 58px; z-index: 20; background-color: #f8f9fa !important; min-width: 150px; max-width: 150px; border-right: 2px solid #dee2e6 !important; box-shadow: 0 1px 0 #dee2e6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* 無効行のグレーアウト */
+    .row-disabled td { background-color: #f8f9fa !important; }
+    .table-hover tbody tr.row-disabled:hover td { background-color: #f8f9fa !important; }
+    .table-hover tbody tr:not(.row-disabled):hover .sticky-col1,
+    .table-hover tbody tr:not(.row-disabled):hover .sticky-col2 { background-color: #ececf6 !important; }
+</style>
+
+<script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'workspace_list' %}">ワークスペース一覧</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'database_list' database.workspace.pk %}">{{ database.workspace.name }}</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'lot_list' database.pk %}">{{ database.name }}</a></li>
+        <li class="breadcrumb-item active" aria-current="page">高度統計・分析</li>
+    </ol>
+</nav>
+
+<div class="row mb-3 align-items-center">
+    <div class="col">
+        <div class="d-flex align-items-center gap-3 mb-1">
+            <h2 class="fw-bold mb-0"><i class="bi bi-cpu text-danger"></i> 高度統計・分析ダッシュボード</h2>
+            <button class="btn btn-sm btn-outline-primary fw-bold px-3 shadow-sm" type="button" data-bs-toggle="offcanvas" data-bs-target="#guideOffcanvas" aria-controls="guideOffcanvas">
+                使い方・グラフ解説
+            </button>
+        </div>
+        <p class="text-muted mb-0">カテゴリーデータでの色分けや、テキスト検索による絞り込みが可能です。</p>
+    </div>
+    <div class="col-auto">
+        <a href="{% url 'lot_list' database.pk %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-return-left"></i> 一覧に戻る</a>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0 mb-3 h-100">
+            <div class="card-header bg-dark text-white fw-bold"><i class="bi bi-sliders"></i> グラフ設定</div>
+            <div class="card-body bg-light">
+                <div class="mb-3">
+                    <label class="form-label fw-bold small">1. グラフの種類</label>
+                    <select id="chartType" class="form-select form-select-sm border-primary">
+                        <option value="scatter">相関分析（散布図）</option>
+                        <option value="box">ばらつき分析（箱ひげ図）</option>
+                        <option value="heatmap">全体相関（ヒートマップ）</option>
+                        <option value="parcoords">多次元探索（平行座標プロット）</option>
+                        <option value="3d_scatter">複合要因分析（3D散布図）</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold small text-success">2. 分析項目の選択</label>
+                    <div class="border rounded p-2 bg-white shadow-sm" style="max-height: 200px; overflow-y: auto;">
+                        {% for item in item_defs %}
+                        <div class="form-check">
+                            <input class="form-check-input item-check" type="checkbox" value="{{ item.item_name }}" id="item_{{ item.pk }}" data-type="{{ item.data_type }}" autocomplete="off">
+                            <label class="form-check-label small" for="item_{{ item.pk }}">{{ item.item_name }} <span class="text-muted" style="font-size: 0.7em;">({{ item.get_data_type_display }})</span></label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <button id="analyzeBtn" class="btn btn-primary w-100 fw-bold shadow-sm mt-2">
+                    <i class="bi bi-play-fill"></i> 分析実行・グラフ更新
+                </button>
+
+                <hr class="my-3">
+
+                <button type="button" class="btn btn-outline-secondary w-100 fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#dataTableModal">
+                    <i class="bi bi-table"></i> 分析データ選択・外れ値除外
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-9">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <div id="axisSelectors" class="row g-2 mb-2" style="display: none;">
+                    <div class="col-6 col-md-3">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-light fw-bold">X軸</span>
+                            <select id="xAxis" class="form-select"></select>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-light fw-bold">Y軸</span>
+                            <select id="yAxis" class="form-select"></select>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3" id="zAxisContainer" style="display: none;">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-light fw-bold">Z軸</span>
+                            <select id="zAxis" class="form-select"></select>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text text-white fw-bold" style="background-color: #6c757d;">色分け</span>
+                            <select id="colorAxis" class="form-select">
+                                <option value="">-- 指定なし --</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="chartPlaceholder" style="height: 500px;" class="d-flex align-items-center justify-content-center text-muted border rounded bg-light">
+                    <div class="text-center">
+                        <i class="bi bi-bar-chart display-4"></i><br>
+                        左のパネルで2つ以上項目を選び、「分析実行」を押してください
+                    </div>
+                </div>
+                
+                <div id="plotlyMain" style="width: 100%; height: 500px; display: none;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="dataTableModal" tabindex="-1" aria-labelledby="dataTableModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content shadow-lg border-0">
+            
+            <div class="modal-header bg-light d-flex align-items-center">
+                <h5 class="modal-title fw-bold  mb-0 d-flex align-items-center me-auto" id="dataTableModalLabel">
+                    <i class="bi bi-table me-2"></i> 分析データ選択・外れ値除外
+                    <button type="button" class="btn btn-primary btn-sm  ms-3 text-white fw-bold" data-bs-toggle="modal" data-bs-target="#helpModal">
+                        <i class="bi bi-question-circle"></i> データ選択・除外方法
+                    </button>
+                </h5>
+                
+                <div class="dropdown me-4">
+                    <button class="btn btn-outline-dark btn-sm dropdown-toggle fw-bold" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                        <i class="bi bi-layout-three-columns"></i> 列の表示切替
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end p-2 shadow-sm" style="max-height: 300px; overflow-y: auto;">
+                        {% for item in item_defs %}
+                        <li>
+                            <div class="form-check">
+                                <input class="form-check-input col-toggle" type="checkbox" value="{{ item.item_name }}" id="disp_{{ item.pk }}" checked autocomplete="off">
+                                <label class="form-check-label small" for="disp_{{ item.pk }}">{{ item.item_name }}</label>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+
+                <button type="button" class="btn-close ms-0" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            
+            <div class="modal-body p-0">
+                <div id="topScrollWrapper" style="overflow-x: auto; overflow-y: hidden; height: 16px; border-bottom: 1px solid #dee2e6;">
+                    <div id="topScrollInner" style="height: 1px;"></div>
+                </div>
+
+                <div class="table-responsive hide-scrollbar" id="tableScrollArea" style="max-height: 65vh;">
+                    <table class="table table-bordered table-hover table-sm text-nowrap mb-0" id="cleansingTable">
+                        <thead>
+                            <tr>
+                                <th class="text-center align-middle sticky-top-left1">対象<br><input type="checkbox" id="checkAllRows" checked title="すべて選択/解除" autocomplete="off"></th>
+                                <th class="align-middle sticky-top-left2">Lot番号</th>
+                                <th class="align-middle sticky-header">日付</th>
+                                {% for item in item_defs %}
+                                <th class="sticky-header" data-col="{{ item.item_name }}">
+                                    {{ item.item_name }}<br>
+                                    {% if item.data_type == 'number' or item.data_type == 'calc' %}
+                                        <div class="d-flex gap-1 mt-1">
+                                            <input type="number" class="form-control form-control-sm min-val" data-col="{{ item.item_name }}" placeholder="Min" style="width: 70px;">
+                                            <input type="number" class="form-control form-control-sm max-val" data-col="{{ item.item_name }}" placeholder="Max" style="width: 70px;">
+                                        </div>
+                                    {% else %}
+                                        <div class="mt-1">
+                                            <input type="text" class="form-control form-control-sm txt-val" data-col="{{ item.item_name }}" placeholder="テキスト検索" style="width: 144px;">
+                                        </div>
+                                    {% endif %}
+                                </th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for lot in lots %}
+                            <tr class="data-row" data-index="{{ forloop.counter0 }}">
+                                <td class="text-center sticky-col1"><input type="checkbox" class="row-check" checked autocomplete="off"></td>
+                                <td class="fw-bold sticky-col2">{{ lot.lot_number }}</td>
+                                <td>{{ lot.recorded_date|date:"Y/m/d" }}</td>
+                                {% for item in item_defs %}
+                                <td data-col="{{ item.item_name }}">
+                                    {% with val=lot.experimental_data|get_item:item.item_name %}
+                                        {% if item.data_type == 'number' or item.data_type == 'calc' %}
+                                            {{ val|floatformat:2|default:"-" }}
+                                        {% else %}
+                                            {{ val|default:"-" }}
+                                        {% endif %}
+                                    {% endwith %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="100" class="text-center text-muted py-4">データがありません。</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="modal-footer bg-light">
+                <span class="text-muted small me-auto"><i class="bi bi-info-circle"></i> ここで条件を変更すると、裏側で自動的に分析の対象から除外・追加されます。</span>
+                <button type="button" class="btn-outline-dark btn" data-bs-dismiss="modal">閉じてグラフへ戻る</button>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="helpModal" tabindex="-1" aria-labelledby="helpModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title fw-bold" id="helpModalLabel"><i class="bi bi-question-circle-fill"></i> データ選択・除外方法</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body px-5 py-4">
+                <p class="text-muted mb-4">
+                    この画面では、グラフや相関分析に計算させるデータの中から、外れ値や不要なデータを簡単に除外することができます。条件から外れた行は自動的に背景がグレーになり、分析計算から除外されます。
+                </p>
+                
+                <div class="mb-4">
+                    <h6 class="fw-bold text-primary border-bottom pb-2"><i class="bi bi-check-square"></i> 対象チェックボックス（手動除外）</h6>
+                    <p class="small text-dark mb-1">表の一番左にあるチェックボックスです。</p>
+                    <p class="small text-muted">「このLotは明らかな失敗実験だから除外したい」など、手動でピンポイントにデータを省く際に使用します。一番上のチェックで全選択/全解除も可能です。</p>
+                </div>
+
+                <div class="mb-4">
+                    <h6 class="fw-bold text-success border-bottom pb-2"><i class="bi bi-arrows-collapse"></i> Min / Max (数値の範囲指定)</h6>
+                    <p class="small text-dark mb-1">数値項目の列名の下にある入力欄です。</p>
+                    <p class="small text-muted">例えば「Minに10」「Maxに50」と入力すると、その数値の範囲から外れたデータを持つ行のチェックが自動的に外れます。極端な外れ値や測定ミスのカットに便利です。</p>
+                </div>
+
+                <div class="mb-4">
+                    <h6 class="fw-bold text-warning border-bottom pb-2" style="color: #d39e00 !important;"><i class="bi bi-search"></i> テキスト検索 (文字の絞り込み)</h6>
+                    <p class="small text-dark mb-1">テキスト項目の列名の下にある入力欄です。</p>
+                    <p class="small text-muted">入力した文字が<b>「含まれない」</b>行を自動的に除外します。「合格」と入力して合格ロットだけを分析したり、特定の原料名で絞り込む際に使用します。</p>
+                </div>
+
+                <div class="mb-2">
+                    <h6 class="fw-bold text-secondary border-bottom pb-2"><i class="bi bi-layout-three-columns"></i> 列の表示切替</h6>
+                    <p class="small text-dark mb-1">表の左上のボタンです。</p>
+                    <p class="small text-muted">列数が多くて見づらい場合に、画面上の表示だけを隠すことができます。ここで列を非表示にしても、分析データとしては保持されるためグラフ描画に影響はありません。</p>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-outline-success fw-bold" data-bs-target="#dataTableModal" data-bs-toggle="modal">
+                    <i class="bi bi-table"></i> 表に戻る
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const allData = JSON.parse('{{ plot_data_json|escapejs }}');
+    
+    // --- スクロール同期 ---
+    const topScrollWrapper = document.getElementById('topScrollWrapper');
+    const topScrollInner = document.getElementById('topScrollInner');
+    const tableScrollArea = document.getElementById('tableScrollArea');
+    const mainTable = document.getElementById('cleansingTable');
+
+    function syncScrollWidth() {
+        if(topScrollInner && mainTable) {
+            topScrollInner.style.width = mainTable.offsetWidth + 'px';
+        }
+    }
+    
+    topScrollWrapper.addEventListener('scroll', () => { tableScrollArea.scrollLeft = topScrollWrapper.scrollLeft; });
+    tableScrollArea.addEventListener('scroll', () => { topScrollWrapper.scrollLeft = tableScrollArea.scrollLeft; });
+    
+    const resizeObserver = new ResizeObserver(() => { syncScrollWidth(); });
+    if(tableScrollArea) resizeObserver.observe(tableScrollArea);
+    if(mainTable) resizeObserver.observe(mainTable);
+    
+    // モーダルが開いた瞬間にスクロールバーの幅を再計算する
+    const dataTableModal = document.getElementById('dataTableModal');
+    dataTableModal.addEventListener('shown.bs.modal', function () {
+        syncScrollWidth();
+    });
+
+    // --- 列の表示切替 ---
+    document.querySelectorAll('.col-toggle').forEach(cb => {
+        cb.addEventListener('change', function() {
+            const colName = this.value;
+            const displayStyle = this.checked ? '' : 'none';
+            document.querySelectorAll(`th[data-col="${colName}"]`).forEach(th => th.style.display = displayStyle);
+            document.querySelectorAll(`td[data-col="${colName}"]`).forEach(td => td.style.display = displayStyle);
+        });
+    });
+
+    // --- テーブルフィルタ ---
+    const minInputs = document.querySelectorAll('.min-val');
+    const maxInputs = document.querySelectorAll('.max-val');
+    const txtInputs = document.querySelectorAll('.txt-val');
+    const rows = document.querySelectorAll('.data-row');
+
+    function updateRowStyle(row, isPass) {
+        row.querySelector('.row-check').checked = isPass;
+        if(isPass) {
+            row.classList.remove('row-disabled'); row.style.color = '';
+        } else {
+            row.classList.add('row-disabled'); row.style.color = '#adb5bd';
+        }
+    }
+
+    function applyTableFilters() {
+        const numConditions = {}, txtConditions = {};
+        minInputs.forEach(i => { if(i.value) numConditions[i.dataset.col] = { ...numConditions[i.dataset.col], min: parseFloat(i.value) }; });
+        maxInputs.forEach(i => { if(i.value) numConditions[i.dataset.col] = { ...numConditions[i.dataset.col], max: parseFloat(i.value) }; });
+        txtInputs.forEach(i => { if(i.value) txtConditions[i.dataset.col] = i.value.toLowerCase(); });
+
+        rows.forEach(row => {
+            let isPass = true;
+            for(let col in numConditions) {
+                const cell = row.querySelector(`td[data-col="${col}"]`);
+                if(cell) {
+                    const val = parseFloat(cell.innerText.replace(/,/g, ''));
+                    if(isNaN(val) || (numConditions[col].min !== undefined && val < numConditions[col].min) || (numConditions[col].max !== undefined && val > numConditions[col].max)) isPass = false;
+                }
+            }
+            for(let col in txtConditions) {
+                const cell = row.querySelector(`td[data-col="${col}"]`);
+                if(cell && !cell.innerText.toLowerCase().includes(txtConditions[col])) isPass = false;
+            }
+            updateRowStyle(row, isPass);
+        });
+    }
+
+    minInputs.forEach(i => i.addEventListener('input', applyTableFilters));
+    maxInputs.forEach(i => i.addEventListener('input', applyTableFilters));
+    txtInputs.forEach(i => i.addEventListener('input', applyTableFilters));
+    
+    document.querySelectorAll('.row-check').forEach(chk => { chk.addEventListener('change', function() { updateRowStyle(this.closest('tr'), this.checked); }); });
+    document.getElementById('checkAllRows').addEventListener('change', function() { const isChecked = this.checked; document.querySelectorAll('.row-check').forEach(chk => { updateRowStyle(chk.closest('tr'), isChecked); }); });
+
+    // --- グラフ描画用：データの安全な読み取り ---
+    const itemTypes = {};
+    document.querySelectorAll('.item-check').forEach(cb => { itemTypes[cb.value] = cb.dataset.type; });
+
+    function parseValue(key, rawValue) {
+        if (rawValue === null || rawValue === undefined || rawValue === '') return null;
+        const type = itemTypes[key];
+        if (type === 'number' || type === 'calc') {
+            const val = parseFloat(String(rawValue).replace(/,/g, ''));
+            return isNaN(val) ? null : val;
+        }
+        return String(rawValue); 
+    }
+
+    function calcPearson(x, y) {
+        let n = x.length; if(n === 0) return 0;
+        let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, sumY2 = 0;
+        for (let i = 0; i < n; i++) { sumX += x[i]; sumY += y[i]; sumXY += x[i] * y[i]; sumX2 += x[i] * x[i]; sumY2 += y[i] * y[i]; }
+        let num = (n * sumXY) - (sumX * sumY);
+        let den = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+        return den === 0 ? 0 : num / den;
+    }
+
+    // --- 回帰線（トレンドライン）と決定係数 R² を計算する関数 ---
+    function calcLinearRegression(x, y) {
+        let n = x.length;
+        if (n < 2) return null;
+        let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+        for (let i = 0; i < n; i++) {
+            sumX += x[i]; sumY += y[i]; sumXY += x[i] * y[i]; sumX2 += x[i] * x[i];
+        }
+        let slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+        let intercept = (sumY - slope * sumX) / n;
+        let r = calcPearson(x, y);
+        return { slope: slope, intercept: intercept, r2: r * r };
+    }
+
+    // --- 分析実行・グラフ描画 ---
+    document.getElementById('analyzeBtn').addEventListener('click', function() {
+        const checkedBoxes = Array.from(document.querySelectorAll('.item-check:checked'));
+        const selectedItems = checkedBoxes.map(cb => cb.value);
+        const numericItems = checkedBoxes.filter(cb => cb.dataset.type === 'number' || cb.dataset.type === 'calc').map(cb => cb.value);
+
+        if (selectedItems.length < 2) { alert('相関を分析するために、左のパネルから2つ以上の項目にチェックを入れてください。'); return; }
+
+        const activeIndices = Array.from(document.querySelectorAll('.row-check')).map((chk, idx) => chk.checked ? idx : -1).filter(i => i !== -1);
+        const filteredData = activeIndices.map(i => allData[i]);
+
+        if (filteredData.length === 0) { alert('有効なデータがありません。表のフィルター条件を見直してください。'); return; }
+
+        try {
+            // 表示エリアの切り替え
+            const placeholder = document.getElementById('chartPlaceholder');
+            placeholder.classList.remove('d-flex');
+            placeholder.style.display = 'none';
+            
+            const plotlyDiv = document.getElementById('plotlyMain');
+            plotlyDiv.style.display = 'block';
+
+            const chartType = document.getElementById('chartType').value;
+            const axisDiv = document.getElementById('axisSelectors');
+            const xSel = document.getElementById('xAxis');
+            const ySel = document.getElementById('yAxis');
+            const colorSel = document.getElementById('colorAxis');
+
+            // 確実な描画のため、少し待機してからグラフを作成
+            setTimeout(() => {
+                const axisDiv = document.getElementById('axisSelectors');
+                const xSel = document.getElementById('xAxis');
+                const ySel = document.getElementById('yAxis');
+                const zSel = document.getElementById('zAxis'); 
+                const zContainer = document.getElementById('zAxisContainer'); 
+                const colorSel = document.getElementById('colorAxis');
+
+                if (chartType === 'heatmap') {
+                    axisDiv.style.display = 'none';
+                    zContainer.style.display = 'none';
+                    if (numericItems.length < 2) {
+                        plotlyDiv.innerHTML = '<div class="alert alert-warning m-4">ヒートマップを描画するには、数値・計算項目を2つ以上選択してください。</div>';
+                        return;
+                    }
+                    plotlyDiv.innerHTML = ''; 
+                    const matrix = [];
+                    for(let i=0; i<numericItems.length; i++) {
+                        const row = [];
+                        for(let j=0; j<numericItems.length; j++) {
+                            if (i === j) row.push(1);
+                            else {
+                                const x = [], y = [];
+                                filteredData.forEach(d => {
+                                    const vx = parseValue(numericItems[i], d.vals[numericItems[i]]);
+                                    const vy = parseValue(numericItems[j], d.vals[numericItems[j]]);
+                                    if(vx !== null && vy !== null) { x.push(vx); y.push(vy); }
+                                });
+                                row.push(calcPearson(x, y));
+                            }
+                        }
+                        matrix.push(row);
+                    }
+                    const trace = { z: matrix, x: numericItems, y: numericItems, type: 'heatmap', colorscale: 'RdBu', zmin: -1, zmax: 1, text: matrix.map(r => r.map(v => v.toFixed(2))), texttemplate: "%{text}", hoverinfo: "x+y+text" };
+                    Plotly.newPlot('plotlyMain', [trace], { title: `項目間の相関ヒートマップ (対象: ${filteredData.length}件)`, margin: {l: 120, b: 120, t: 40, r: 20} }, {responsive: true});
+
+                } else if (chartType === 'parcoords') {
+                    axisDiv.style.display = 'flex';
+                    zContainer.style.display = 'none'; 
+                    xSel.disabled = true;
+                    ySel.disabled = true;
+                    colorSel.disabled = false;
+
+                    if (numericItems.length < 2) {
+                        plotlyDiv.innerHTML = '<div class="alert alert-warning m-4 shadow-sm">平行座標プロットを描画するには、左のパネルから数値・計算項目を2つ以上選択してください。</div>';
+                        return;
+                    }
+
+                    const currentCol = colorSel.value;
+                    colorSel.innerHTML = '<option value="">-- 指定なし（単色） --</option>';
+                    numericItems.forEach(item => { colorSel.add(new Option(item, item)); });
+                    if (numericItems.includes(currentCol)) colorSel.value = currentCol; else colorSel.value = "";
+
+                    const drawParcoords = function() {
+                        const colorKey = colorSel.value;
+                        const missingCounts = {};
+                        numericItems.forEach(item => missingCounts[item] = 0);
+
+                        const validData = filteredData.filter(d => {
+                            let isRowValid = true;
+                            numericItems.forEach(item => {
+                                if (parseValue(item, d.vals[item]) === null) {
+                                    isRowValid = false;
+                                    missingCounts[item]++; 
+                                }
+                            });
+                            return isRowValid;
+                        });
+
+                        if (validData.length === 0) {
+                            const missingDetails = Object.keys(missingCounts)
+                                .filter(item => missingCounts[item] > 0)
+                                .map(item => `「${item}」(${missingCounts[item]}件)`)
+                                .join('、 ');
+
+                            plotlyDiv.innerHTML = `
+                                <div class="alert alert-warning m-4 shadow-sm">
+                                    <h6 class="fw-bold text-danger"><i class="bi bi-exclamation-triangle"></i> データ不足エラー</h6>
+                                    選択した項目を同時に満たす（すべてに有効な数値が入っている）Lotデータが1件もありません。<br><br>
+                                    <span class="fw-bold">【欠損が検出された項目】</span><br>
+                                    ${missingDetails}<br><br>
+                                    左のパネルからこれらの項目のチェックを外すか、「分析データ選択」からデータ不足のLotを除外してください。
+                                </div>`;
+                            return;
+                        } else {
+                            if (plotlyDiv.querySelector('.alert')) plotlyDiv.innerHTML = '';
+                        }
+
+                        const dimensions = numericItems.map(item => {
+                            return { label: item, values: validData.map(d => parseValue(item, d.vals[item])) };
+                        });
+                        const trace = { type: 'parcoords', dimensions: dimensions };
+
+                        if (colorKey) {
+                            trace.line = {
+                                color: validData.map(d => parseValue(colorKey, d.vals[colorKey])),
+                                colorscale: 'Jet', showscale: true, colorbar: { title: colorKey }
+                            };
+                        } else {
+                            trace.line = { color: '#0d6efd' };
+                        }
+
+                        Plotly.newPlot('plotlyMain', [trace], { 
+                            title: `<b>多次元条件探索</b> (対象: ${validData.length}件)`, 
+                            margin: {t: 80, b: 40, l: 60, r: 60} 
+                        }, {responsive: true});
+                    };
+                    colorSel.onchange = drawParcoords;
+                    drawParcoords();
+
+                } else if (chartType === '3d_scatter') {
+                    axisDiv.style.display = 'flex';
+                    zContainer.style.display = 'block'; 
+                    xSel.disabled = false;
+                    ySel.disabled = false;
+                    zSel.disabled = false;
+                    colorSel.disabled = false;
+
+                    const currentX = xSel.value, currentY = ySel.value, currentZ = zSel.value, currentCol = colorSel.value;
+                    xSel.innerHTML = ''; ySel.innerHTML = ''; zSel.innerHTML = ''; colorSel.innerHTML = '<option value="">-- 指定なし --</option>';
+
+                    selectedItems.forEach(item => {
+                        xSel.add(new Option(item, item)); ySel.add(new Option(item, item)); zSel.add(new Option(item, item)); colorSel.add(new Option(item, item));
+                    });
+
+                    if (selectedItems.includes(currentX)) xSel.value = currentX; else xSel.value = selectedItems[0] || '';
+                    if (selectedItems.includes(currentY)) ySel.value = currentY; else ySel.value = selectedItems.length > 1 ? selectedItems[1] : selectedItems[0] || '';
+                    if (selectedItems.includes(currentZ)) zSel.value = currentZ; else zSel.value = selectedItems.length > 2 ? selectedItems[2] : selectedItems[0] || '';
+                    if (selectedItems.includes(currentCol)) colorSel.value = currentCol; else colorSel.value = "";
+
+                    const draw3DScatter = function() {
+                        const xKey = xSel.value, yKey = ySel.value, zKey = zSel.value, colorKey = colorSel.value;
+                        if (!xKey || !yKey || !zKey) return;
+
+                        const groupedData = {};
+                        let validCount = 0;
+
+                        filteredData.forEach(d => {
+                            const vx = parseValue(xKey, d.vals[xKey]);
+                            const vy = parseValue(yKey, d.vals[yKey]);
+                            const vz = parseValue(zKey, d.vals[zKey]);
+
+                            if (vx !== null && vy !== null && vz !== null) {
+                                const groupName = colorKey ? (String(d.vals[colorKey] || '未設定')) : '全データ';
+                                if (!groupedData[groupName]) groupedData[groupName] = { x: [], y: [], z: [], text: [] };
+
+                                groupedData[groupName].x.push(vx);
+                                groupedData[groupName].y.push(vy);
+                                groupedData[groupName].z.push(vz);
+                                groupedData[groupName].text.push(`Lot: ${d.lot}<br>日付: ${d.date}`);
+                                validCount++;
+                            }
+                        });
+
+                        if (validCount === 0) {
+                            plotlyDiv.innerHTML = '<div class="alert alert-warning m-4 shadow-sm">選択された条件で描画できるデータがありません。（X, Y, Zすべての軸に有効な数値が必要です）</div>';
+                            return;
+                        } else {
+                            if (plotlyDiv.querySelector('.alert')) plotlyDiv.innerHTML = '';
+                        }
+
+                        const traces = [];
+                        const defaultColors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
+                        let colorIndex = 0;
+
+                        Object.keys(groupedData).forEach(groupName => {
+                            const groupColor = defaultColors[colorIndex % defaultColors.length];
+                            colorIndex++;
+                            const gData = groupedData[groupName];
+
+                            traces.push({
+                                name: groupName, x: gData.x, y: gData.y, z: gData.z, text: gData.text,
+                                type: 'scatter3d', mode: 'markers',
+                                marker: { color: groupColor, size: 5, opacity: 0.8, line: {width: 1, color: 'white'} },
+                                hoverinfo: 'text+name',
+                                legendgroup: groupName
+                            });
+                        });
+
+                        Plotly.newPlot('plotlyMain', traces, {
+                            title: `<b>3D相関分析</b> (対象: ${validCount}件)`,
+                            scene: { xaxis: {title: xKey}, yaxis: {title: yKey}, zaxis: {title: zKey} },
+                            margin: {t: 40, b: 0, l: 0, r: 0},
+                            legend: { title: {text: colorKey} }
+                        }, {responsive: true});
+                    };
+
+                    xSel.onchange = draw3DScatter; ySel.onchange = draw3DScatter; zSel.onchange = draw3DScatter; colorSel.onchange = draw3DScatter;
+                    draw3DScatter();
+
+                } else {
+                    axisDiv.style.display = 'flex';
+                    zContainer.style.display = 'none'; 
+                    xSel.disabled = false;
+                    ySel.disabled = false;
+                    colorSel.disabled = false;
+                    
+                    const currentX = xSel.value, currentY = ySel.value, currentCol = colorSel.value;
+                    xSel.innerHTML = ''; ySel.innerHTML = ''; colorSel.innerHTML = '<option value="">-- 指定なし --</option>';
+                    
+                    selectedItems.forEach(item => {
+                        xSel.add(new Option(item, item)); ySel.add(new Option(item, item)); colorSel.add(new Option(item, item));
+                    });
+
+                    if (selectedItems.includes(currentX)) xSel.value = currentX; else xSel.value = selectedItems[0];
+                    if (selectedItems.includes(currentY)) ySel.value = currentY; else ySel.value = selectedItems.length > 1 ? selectedItems[1] : selectedItems[0];
+                    if (selectedItems.includes(currentCol)) colorSel.value = currentCol; else colorSel.value = "";
+
+                    const drawScatterBox = function() {
+                        const xKey = xSel.value, yKey = ySel.value, colorKey = colorSel.value;
+                        if (!xKey || !yKey) return;
+
+                        const groupedData = {};
+                        let validCount = 0;
+                        
+                        filteredData.forEach(d => {
+                            const vx = parseValue(xKey, d.vals[xKey]);
+                            const vy = parseValue(yKey, d.vals[yKey]);
+
+                            let isValid = false;
+                            if (chartType === 'scatter') isValid = (vx !== null && vy !== null);
+                            else if (chartType === 'box') isValid = (vx !== null && vy !== null && typeof vy === 'number');
+
+                            if(isValid) {
+                                const groupName = colorKey ? (String(d.vals[colorKey] || '未設定')) : '全データ';
+                                if(!groupedData[groupName]) groupedData[groupName] = { x: [], y: [], text: [] };
+                                
+                                groupedData[groupName].x.push(vx);
+                                groupedData[groupName].y.push(vy);
+                                groupedData[groupName].text.push(`Lot: ${d.lot}<br>日付: ${d.date}`);
+                                validCount++;
+                            }
+                        });
+
+                        if (validCount === 0) {
+                            plotlyDiv.innerHTML = '<div class="alert alert-warning m-4 shadow-sm">選択された条件で描画できるデータがありません。（例：箱ひげ図のY軸にテキストを指定している等）</div>';
+                            return;
+                        } else {
+                            if (plotlyDiv.querySelector('.alert')) plotlyDiv.innerHTML = '';
+                        }
+
+                        const traces = [];
+                        const defaultColors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
+                        let colorIndex = 0;
+
+                        Object.keys(groupedData).forEach(groupName => {
+                            const groupColor = defaultColors[colorIndex % defaultColors.length];
+                            colorIndex++;
+                            const gData = groupedData[groupName];
+
+                            traces.push({
+                                name: groupName, x: gData.x, y: gData.y, text: gData.text,
+                                type: chartType === 'box' ? 'box' : 'scatter', mode: 'markers',
+                                marker: { color: groupColor, size: 10, opacity: 0.7, line: {width: 1, color: 'white'} },
+                                boxpoints: 'all', jitter: 0.3, pointpos: -1.8,
+                                legendgroup: groupName 
+                            });
+
+                            if (chartType === 'scatter' && gData.x.length > 1) {
+                                const reg = calcLinearRegression(gData.x, gData.y);
+                                if (reg && !isNaN(reg.slope)) {
+                                    const minX = Math.min(...gData.x);
+                                    const maxX = Math.max(...gData.x);
+                                    const minY = reg.slope * minX + reg.intercept;
+                                    const maxY = reg.slope * maxX + reg.intercept;
+                                    
+                                    const sign = reg.intercept >= 0 ? '+' : '-';
+                                    const absInt = Math.abs(reg.intercept).toFixed(2);
+                                    const eqText = `R²=${reg.r2.toFixed(2)} (y=${reg.slope.toFixed(2)}x ${sign} ${absInt})`;
+
+                                    traces.push({
+                                        name: eqText, x: [minX, maxX], y: [minY, maxY],
+                                        type: 'scatter', mode: 'lines',
+                                        line: { color: groupColor, width: 2, dash: 'dot' }, 
+                                        legendgroup: groupName, 
+                                        hoverinfo: 'name',
+                                        showlegend: true
+                                    });
+                                }
+                            }
+                        });
+
+                        Plotly.newPlot('plotlyMain', traces, { 
+                            title: `<b>${yKey}</b> vs <b>${xKey}</b> (対象: ${validCount}件)`, 
+                            xaxis: {title: xKey}, yaxis: {title: yKey}, margin: {t: 40, b: 40, l: 60, r: 20}, legend: { title: {text: colorKey} }
+                        }, {responsive: true});
+                    };
+
+                    xSel.onchange = drawScatterBox; ySel.onchange = drawScatterBox; colorSel.onchange = drawScatterBox;
+                    drawScatterBox();
+                }
+            }, 100);
+
+        } catch (e) {
+            console.error(e);
+            alert("グラフの描画処理中にエラーが発生しました。\n詳細: " + e.message);
+        }
+    });
+});
+</script>
+
+<div class="offcanvas offcanvas-end shadow-lg" tabindex="-1" id="guideOffcanvas" aria-labelledby="guideOffcanvasLabel" style="width: 450px;">
+    <div class="offcanvas-header bg-dark text-white">
+        <h5 class="offcanvas-title fw-bold" id="guideOffcanvasLabel">使い方・グラフ解説</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body" style="background-color: #f8f9fa;">
+        <div class="alert alert-info border-0 shadow-sm mb-4">
+            <h6 class="fw-bold border-bottom border-info pb-2 mb-2">基本のステップ</h6>
+            <ol class="small mb-0 ps-3">
+                <li class="mb-1">左上のパネルから<b>目的のグラフ</b>を選びます。</li>
+                <li class="mb-1">分析したい<b>データ項目</b>にチェックを入れます。</li>
+                <li><b>「分析実行」</b>ボタンを押すとグラフが描画されます。</li>
+            </ol>
+        </div>
+        <hr class="my-4 text-muted">
+        <h6 class="fw-bold text-secondary mb-2">データの絞り込み・外れ値の除外</h6>
+        <div class="bg-white p-3 rounded border shadow-sm mb-4">
+            <p class="small text-dark mb-2">左パネルの<b>「<i class="bi bi-table"></i> 分析データ選択・外れ値除外」</b>ボタンから行えます。</p>
+            <p class="small text-muted mb-0"><i class="bi bi-lightbulb text-warning"></i> <b>こんな時に有効です：</b><br>明らかな実験ミスや極端な異常値（ノイズ）を取り除き、より正確なデータの傾向や相関関係を見つけ出したい時に活用してください。</p>
+        </div>
+        <h6 class="fw-bold text-secondary mb-3">各グラフの特長と使いどころ</h6>
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body p-3">
+                <h6 class="fw-bold text-primary mb-1">相関分析（散布図）</h6>
+                <p class="small text-muted mb-2">「原因と結果の関係」を知りたい時に。</p>
+                <p class="small mb-0">2つの数値の連動性を見ます。データが直線上に並ぶほど相関が強く、表示される <b>R²（決定係数）</b> が 1.0 に近いほど、その原因が結果に強く影響している客観的な証拠になります。</p>
+            </div>
+        </div>
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body p-3">
+                <h6 class="fw-bold text-success mb-1">ばらつき分析（箱ひげ図）</h6>
+                <p class="small text-muted mb-2">「条件ごとの安定性や外れ値」を比較したい時に。</p>
+                <p class="small mb-0">X軸にカテゴリー（担当者、原料など）、Y軸に数値を選びます。箱が小さいほど品質が安定しており、上下の点（外れ値）で異常の有無を一目で確認できます。</p>
+            </div>
+        </div>
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body p-3">
+                <h6 class="fw-bold text-danger mb-1">全体相関（ヒートマップ）</h6>
+                <p class="small text-muted mb-2">「どの項目同士が連動しているか」を俯瞰したい時に。</p>
+                <p class="small mb-0">すべての数値項目を総当たりで計算し、相関が強い（濃い赤・濃い青）組み合わせを炙り出します。思いがけない要因の発見に役立ちます。</p>
+            </div>
+        </div>
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body p-3">
+                <h6 class="fw-bold text-warning mb-1" style="color: #d39e00 !important;">多次元探索（平行座標プロット）</h6>
+                <p class="small text-muted mb-2">「複数パラメータの"黄金ルート"」を見つけたい時に。</p>
+                <p class="small mb-0">結果の項目で「色分け」を設定します。良い結果を示す色の線が、他の項目でどの範囲を通っているかを辿ることで、最適な条件の組み合わせを視覚的に探索できます。</p>
+            </div>
+        </div>
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-3">
+                <h6 class="fw-bold text-info mb-1" style="color: #0dcaf0 !important;">複合要因分析（3D散布図）</h6>
+                <p class="small text-muted mb-2">「3つの要因がどう絡み合っているか」を立体探索したい時に。</p>
+                <p class="small mb-0">X, Y, Zの3軸空間にデータを配置します。マウスで空間を回転させることで、「温度と圧力が特定のバランスの時だけ収率が上がる」といった複雑な相乗効果を発見できます。</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

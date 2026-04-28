@@ -1,0 +1,676 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block content %}
+<style>
+    .hover-preview-container {
+        display: inline-block;
+    }
+    .hover-preview-image {
+        display: none;
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+        background-color: white;
+        padding: 4px;
+        margin-bottom: 8px;
+    }
+    .hover-preview-image img {
+        max-width: 250px;
+        max-height: 250px;
+        object-fit: contain;
+    }
+    .hover-preview-container:hover .hover-preview-image {
+        display: block;
+    }
+</style>
+<style>
+    /* 下側のスクロールバーを非表示にするための設定 */
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* --- 魔の1px隙間対策 ＆ 行列の完全固定（Sticky） --- */
+    /* --- 2列完全固定（Sticky）＆ 隙間対策版 --- */
+    .sticky-header {
+        position: sticky;
+        top: 0; 
+        z-index: 10;
+        background-color: #f8f9fa !important;
+        /* 下側の境界線を影で代用（1pxの隙間対策） */
+        box-shadow: 0 1px 0 #dee2e6, inset 0 -1px 0 #dee2e6;
+    }
+    
+    /* 1列目：チェックボックス列 */
+    .sticky-check-header, .sticky-check-col {
+        position: sticky;
+        left: 0; /* -1pxをやめて0に固定 */
+        z-index: 20;
+        background-color: #f8f9fa !important;
+        min-width: 45px; max-width: 45px;
+        /* 右側の境界線をborderではなくbox-shadowで描画（隙間を埋める） */
+        box-shadow: 1px 0 0 #dee2e6, inset -1px 0 0 #dee2e6;
+        border: none !important;
+    }
+    .sticky-check-col {
+        z-index: 15;
+        background-color: #f8f9fa;
+    }
+
+    /* 2列目：Lot番号列 */
+    .sticky-lot-header, .sticky-lot-col {
+        position: sticky;
+        left: 45px; /* チェックボックス列の幅(45px)にぴったり合わせる */
+        z-index: 20;
+        background-color: #f8f9fa !important;
+        min-width: 140px; max-width: 140px;
+        /* 右側の太い境界線をbox-shadowで描画 */
+        box-shadow: 2px 0 0 #dee2e6, inset -2px 0 0 #dee2e6;
+        border: none !important;
+    }
+    .sticky-lot-col {
+        z-index: 15;
+        background-color: #ffffff;
+        white-space: nowrap; 
+        overflow: hidden; 
+        text-overflow: ellipsis;
+    }
+
+    /* ヘッダーの重なり部分（左上）の影調整 */
+    .sticky-check-header {
+        z-index: 30;
+        box-shadow: 1px 0 0 #dee2e6, 0 1px 0 #dee2e6, inset -1px -1px 0 #dee2e6;
+    }
+    .sticky-lot-header {
+        z-index: 30;
+        box-shadow: 2px 0 0 #dee2e6, 0 1px 0 #dee2e6, inset -2px -1px 0 #dee2e6;
+    }
+    
+    /* ホバー時の背景色設定 */
+    .table-hover tbody tr:hover .sticky-lot-col {
+        background-color: #ececf6 !important;
+    }
+    .table-hover tbody tr:hover .sticky-check-col {
+        background-color: #ececf6 !important;
+    }
+    /* 比較ボタンの非活性（disabled）と活性状態の差別化 */
+    #compareLotsBtn:disabled {
+        background-color: transparent !important;
+        border: 2px solid #ffc107 !important; /* 黄色の枠線 */
+        color: #000000 !important;            
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    #compareLotsBtn:not(:disabled) {
+        background-color: #ffc107 !important; /* 鮮やかな黄色背景 */
+        color: #000000 !important;            /* 濃いグレーの文字 */
+        border: 2px solid #ffc107 !important;
+        box-shadow: 0 4px 12px rgba(255, 193, 7, 0.4) !important; /* 活性化時に光らせる */
+        transform: scale(1.03);               /* わずかに大きくして強調 */
+        transition: all 0.2s ease-in-out;
+    }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'workspace_list' %}">ワークスペース一覧</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'database_list' database.workspace.pk %}">{{ database.workspace.name }}</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ database.name }}</li>
+  </ol>
+</nav>
+
+<div class="col-auto d-flex flex-wrap gap-2 justify-content-end">
+        
+        
+        <a href="{% url 'database_update' database.pk %}" class="btn btn-outline-secondary fw-bold shadow-sm">
+            <i class="bi bi-shield-lock"></i> テーマ名・権限設定変更
+        </a>
+        
+        <a href="{% url 'database_settings' database.pk %}" class="btn btn-outline-success fw-bold shadow-sm">
+            <i class="bi bi-list-columns-reverse"></i> データ項目設定
+        </a>
+        
+        
+        <a href="{% url 'lot_create' database.pk %}" class="btn btn-primary fw-bold shadow-sm">
+            ＋ 新規データ登録
+        </a>
+    </div>
+
+{% if messages %}
+<div class="row mb-3">
+    <div class="col-12">
+        {% for message in messages %}
+        <div class="alert {% if message.tags == 'error' %}alert-danger{% elif message.tags == 'warning' %}alert-warning{% else %}alert-success{% endif %} alert-dismissible fade show shadow-sm d-flex align-items-center py-2 px-3" role="alert">
+            {% if message.tags == 'error' %}
+                <i class="bi bi-exclamation-octagon-fill fs-5 me-3 text-danger"></i>
+            {% elif message.tags == 'warning' %}
+                <i class="bi bi-exclamation-triangle-fill fs-5 me-3 text-warning"></i>
+            {% else %}
+                <i class="bi bi-check-circle-fill fs-5 me-3 text-success"></i>
+            {% endif %}
+            <div class="fw-bold text-dark">{{ message }}</div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="閉じる"></button>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if anomaly_lots %}
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="alert alert-danger shadow-sm py-2 px-3 mb-2 d-flex align-items-center">
+            <i class="bi bi-exclamation-triangle-fill fs-5 me-3 text-danger"></i>
+            <div class="flex-grow-1">
+                <strong class="me-2 text-danger">確認が必要なデータ (異常値):</strong>
+                {% for lot in anomaly_lots %}
+                    <a href="{% url 'lot_update' database.pk lot.pk %}" class="btn btn-sm btn-danger rounded-pill py-0 px-2 me-1 mb-1 shadow-sm" title="{{ lot.ai_anomaly_msg }}" data-bs-toggle="tooltip">
+                        {{ lot.lot_number }}
+                    </a>
+                {% endfor %}
+            </div>
+            <span class="small text-muted ms-3">※Lot番号をクリックして確認・修正してください</span>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+    <div style="width: 300px;">
+        <input type="text" id="tableSearch" class="form-control" placeholder="🔍 表内を検索...">
+    </div>
+    
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        <button type="button" class="btn btn-warning fw-bold shadow-sm" id="compareLotsBtn" disabled>
+            <i class="bi bi-layout-split"></i> 選択したLotを比較
+        </button>
+        
+        <a href="{% url 'lot_export' database.pk %}" class="btn btn-outline-success shadow-sm">
+            📥 データダウンロード
+        </a>
+        
+        <a href="{% url 'lot_analysis' database.pk %}" class="btn btn-success shadow-sm">
+            <i class="bi bi-bar-chart-fill"></i> 詳細分析(グラフ)
+        </a>
+
+        <form method="post" action="{% url 'batch_recheck_anomalies' database.pk %}" class="m-0">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger shadow-sm" 
+                    onclick="return confirm('最新のAIモデルで、過去のすべてのデータを再審査します。よろしいですか？');">
+                <i class="bi bi-arrow-repeat"></i> AI一括再審査
+            </button>
+        </form>
+        
+        <button type="button" class="btn btn-dark shadow-sm" id="toggleGraphBtn">
+            グラフの表示 / 非表示
+        </button>
+    </div>
+</div>
+
+<div id="graphContainer" class="row mb-4" style="display: none;">
+    <div class="col-md-6 mb-3">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white fw-bold border-bottom-0 pt-3">
+                <i class="bi bi-graph-up"></i> 📈 Lot別推移グラフ
+            </div>
+            <div class="card-body">
+                <div class="input-group input-group-sm mb-3">
+                    <span class="input-group-text bg-light">表示項目(Y軸)</span>
+                    <select id="lineYSelect" class="form-select">
+                        {% for item in item_defs %}
+                            {% if item.data_type == 'number' or item.data_type == 'calc' %}
+                                <option value="{{ item.item_name }}">{{ item.item_name }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+                <div style="position: relative; height: 250px; width: 100%;">
+                    <canvas id="lineChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 mb-3">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white fw-bold  border-bottom-0 pt-3">
+                <i class="bi bi-scatter-chart"></i> ⏺️ 相関関係（散布図）
+            </div>
+            <div class="card-body">
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-light">原因(X軸)</span>
+                            <select id="scatterXSelect" class="form-select">
+                                {% for item in item_defs %}
+                                    {% if item.data_type == 'number' or item.data_type == 'calc' %}
+                                        <option value="{{ item.item_name }}">{{ item.item_name }}</option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-light">結果(Y軸)</span>
+                            <select id="scatterYSelect" class="form-select">
+                                {% for item in item_defs %}
+                                    {% if item.data_type == 'number' or item.data_type == 'calc' %}
+                                        <option value="{{ item.item_name }}" {% if forloop.last %}selected{% endif %}>{{ item.item_name }}</option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div style="position: relative; height: 250px; width: 100%;">
+                    <canvas id="scatterChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="topScrollWrapper" style="overflow-x: auto; overflow-y: hidden; height: 16px; border-bottom: 1px solid #dee2e6; margin-bottom: -1px;">
+    <div id="topScrollInner" style="height: 1px;"></div>
+</div>
+
+<div id="tableScrollArea" class="table-responsive shadow-sm border rounded hide-scrollbar" style="max-height: 600px;">
+    <table id="mainDataTable" class="table table-hover table-bordered mb-0 align-middle bg-white">
+        <thead class="table-light text-nowrap">
+            <tr>
+                <th class="text-center align-middle sticky-check-header">
+                    <input class="form-check-input m-0" type="checkbox" id="checkAllLots" title="すべての表示行を選択/解除">
+                </th>
+                
+                <th class="text-center align-middle sticky-lot-header" style="cursor: pointer;">
+                    <div class="d-flex justify-content-center align-items-center">
+                        Lot番号
+                        <div class="dropdown ms-1">
+                            <button class="btn btn-sm btn-light border py-0 px-1 text-secondary" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" >▼</button>
+                            <div class="dropdown-menu p-2 shadow-sm text-start" style="max-height: 250px; overflow-y: auto; font-size: 0.85rem; min-width: 180px;" data-dropdown-col="lot_number" onclick="event.stopPropagation();"></div>
+                        </div>
+                    </div>
+                    <input type="text" class="form-control form-control-sm mt-1 col-search" data-filter-col="lot_number" placeholder="絞り込み" onclick="event.stopPropagation();">
+                </th>
+                
+                <th class="text-center align-middle sticky-header" style="cursor: pointer;">
+                    <div class="d-flex justify-content-center align-items-center">
+                        実験日
+                        <div class="dropdown ms-1">
+                            <button class="btn btn-sm btn-light border py-0 px-1 text-secondary" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" >▼</button>
+                            <div class="dropdown-menu p-2 shadow-sm text-start" style="max-height: 250px; overflow-y: auto; font-size: 0.85rem; min-width: 180px;" data-dropdown-col="recorded_date" onclick="event.stopPropagation();"></div>
+                        </div>
+                    </div>
+                    <input type="text" class="form-control form-control-sm mt-1 col-search" data-filter-col="recorded_date" placeholder="絞り込み" style="min-width: 90px;" onclick="event.stopPropagation();">
+                </th>
+                
+                {% for item in item_defs %}
+                <th class="text-center align-middle sticky-header" style="cursor: pointer;" data-col="{{ item.item_name }}">
+                    <div class="d-flex justify-content-center align-items-center">
+                        {{ item.item_name }}
+                        <div class="dropdown ms-1">
+                            <button class="btn btn-sm btn-light border py-0 px-1 text-secondary" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" >▼</button>
+                            <div class="dropdown-menu p-2 shadow-sm text-start" style="max-height: 250px; overflow-y: auto; font-size: 0.85rem; min-width: 180px;" data-dropdown-col="{{ item.item_name }}" onclick="event.stopPropagation();"></div>
+                        </div>
+                    </div>
+                    <input type="text" class="form-control form-control-sm mt-1 col-search" data-filter-col="{{ item.item_name }}" placeholder="絞り込み" style="min-width: 80px;" onclick="event.stopPropagation();">
+                </th>
+                {% endfor %}
+                
+                <th class="text-center align-middle sticky-header" style="cursor: pointer;">
+                    <div class="d-flex justify-content-center align-items-center">
+                        担当者
+                        <div class="dropdown ms-1">
+                            <button class="btn btn-sm btn-light border py-0 px-1 text-secondary" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" >▼</button>
+                            <div class="dropdown-menu p-2 shadow-sm text-start" style="max-height: 250px; overflow-y: auto; font-size: 0.85rem; min-width: 180px;" data-dropdown-col="recorded_by" onclick="event.stopPropagation();"></div>
+                        </div>
+                    </div>
+                    <input type="text" class="form-control form-control-sm mt-1 col-search" data-filter-col="recorded_by" placeholder="絞り込み" style="min-width: 80px;" onclick="event.stopPropagation();">
+                </th>
+                
+                <th class="text-center align-middle sticky-header" style="cursor: pointer;">登録日</th>
+            </tr>
+        </thead>
+        <tbody class="text-nowrap">
+            {% for lot in lots %}
+            <tr>
+                <td class="text-center align-middle sticky-check-col">
+                    <input class="form-check-input lot-compare-check m-0" type="checkbox" value="{{ lot.id }}">
+                </td>
+                <td class="text-center fw-bold sticky-lot-col" data-col="lot_number">
+                    <a href="{% url 'lot_update' database.pk lot.pk %}" class="text-decoration-none d-block">
+                        {{ lot.lot_number }}
+                    </a>
+                </td>
+                <td class="text-center" data-col="recorded_date">{{ lot.recorded_date|date:"Y/m/d" }}</td>
+                
+                {% for item in item_defs %}
+                <td class="text-end" data-col="{{ item.item_name }}">
+                    {% if lot.display_data %}
+                        {% for key, value in lot.display_data.items %}
+                            {% if key == item.item_name %}
+                                
+                                {% if value|length > 0 and value.0.path %}
+                                    <ul class="list-unstyled mb-0 small text-start">
+                                        {% for img in value %}
+                                            <li class="position-relative hover-preview-container text-truncate" style="max-width: 180px;">
+                                                <a href="/media/{{ img.path }}" target="_blank" class="text-decoration-none">
+                                                    <i class="bi bi-image text-primary"></i> {{ img.name }}
+                                                </a>
+                                                <div class="hover-preview-image shadow rounded border">
+                                                    <img src="/media/{{ img.path }}" alt="Preview">
+                                                </div>
+                                            </li>
+                                        {% endfor %}
+                                    </ul>
+                                
+                                {% else %}
+                                    {% if item.data_type == 'number' or item.data_type == 'calc' %}
+                                        {{ value|floatformat:2|default:"-" }}
+                                    {% else %}
+                                        {{ value|default:"-" }}
+                                    {% endif %}
+                                {% endif %}
+                                
+                            {% endif %}
+                        {% endfor %}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                {% endfor %}
+                
+                <td class="text-center">{{ lot.recorded_by|default:"-" }}</td>
+                <td class="text-center">{{ lot.created_at|date:"Y/m/d H:i" }}</td>
+            </tr>
+            
+            {% empty %}
+            <tr>
+                <td colspan="100%" class="text-center py-4 text-muted">
+                    まだデータが登録されていません。「新規データ登録」から最初のデータを作成してください。
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const tableScrollArea = document.getElementById('tableScrollArea');
+    const topScrollWrapper = document.getElementById('topScrollWrapper');
+    const topScrollInner = document.getElementById('topScrollInner');
+    const mainTable = document.getElementById('mainDataTable');
+
+    function syncScrollWidth() {
+        if(topScrollInner && tableScrollArea) {
+            topScrollInner.style.width = tableScrollArea.scrollWidth + 'px';
+        }
+    }
+    if(topScrollWrapper && tableScrollArea) {
+        topScrollWrapper.addEventListener('scroll', () => { tableScrollArea.scrollLeft = topScrollWrapper.scrollLeft; });
+        tableScrollArea.addEventListener('scroll', () => { topScrollWrapper.scrollLeft = tableScrollArea.scrollLeft; });
+    }
+    const resizeObserver = new ResizeObserver(() => { syncScrollWidth(); });
+    if(tableScrollArea) resizeObserver.observe(tableScrollArea);
+    if(mainTable) resizeObserver.observe(mainTable);
+    setTimeout(syncScrollWidth, 100);
+
+    // --- ★ここから：全体検索 ＋ 列フィルター の複合ロジック ---
+    const globalSearchInput = document.getElementById('tableSearch');
+    const colSearchInputs = document.querySelectorAll('.col-search');
+    const tableRows = document.querySelectorAll('tbody tr');
+
+    // 1. 各列の▼ドロップダウン内に、自動でチェックボックスを生成する
+    document.querySelectorAll('.dropdown-menu[data-dropdown-col]').forEach(menu => {
+        const colName = menu.getAttribute('data-dropdown-col');
+        const cells = document.querySelectorAll(`tbody td[data-col="${colName}"]`);
+        const uniqueValues = new Set();
+        
+        cells.forEach(cell => {
+            let text = cell.textContent.trim().replace(/\s+/g, ' '); // 改行や余分な空白を綺麗にする
+            if(text && text !== '-') uniqueValues.add(text);
+        });
+
+        const sortedValues = Array.from(uniqueValues).sort();
+
+        if(sortedValues.length > 0) {
+            // クリアボタンとチェックボックスのHTMLを生成
+            let html = `<div class="mb-2 border-bottom pb-2 text-center"><button type="button" class="btn btn-sm btn-outline-secondary w-100 clear-col-check" data-col="${colName}">選択をクリア</button></div>`;
+            sortedValues.forEach(val => {
+                html += `
+                <div class="form-check mb-1">
+                    <input class="form-check-input col-check-filter" type="checkbox" value="${val}" data-col="${colName}" id="chk_${colName}_${val}">
+                    <label class="form-check-label text-truncate" style="max-width: 150px; cursor: pointer;" for="chk_${colName}_${val}" title="${val}">
+                        ${val}
+                    </label>
+                </div>`;
+            });
+            menu.innerHTML = html;
+        } else {
+            menu.innerHTML = `<span class="text-muted small px-2">データなし</span>`;
+        }
+    });
+
+    // 2. フィルタリング実行関数
+    function filterTable() {
+        const globalWords = globalSearchInput.value.toLowerCase().split(' ').filter(w => w);
+        
+        // テキスト入力の条件を集める
+        const activeTextFilters = [];
+        colSearchInputs.forEach(input => {
+            const val = input.value.toLowerCase().trim();
+            if (val) activeTextFilters.push({ colName: input.dataset.filterCol, text: val });
+        });
+
+        // チェックボックスの条件を集める { '品種': ['半S-400', 'テスト'], ... }
+        const activeCheckFilters = {};
+        document.querySelectorAll('.col-check-filter:checked').forEach(chk => {
+            const col = chk.getAttribute('data-col');
+            if(!activeCheckFilters[col]) activeCheckFilters[col] = [];
+            activeCheckFilters[col].push(chk.value);
+        });
+
+        tableRows.forEach(row => {
+            if (row.querySelector('td[colspan]')) return;
+            const rowText = row.textContent.toLowerCase();
+            
+            // ① 全体検索の判定
+            let matchGlobal = globalWords.every(word => rowText.includes(word));
+            
+            // ② テキスト枠の判定（部分一致）
+            let matchTextCols = true;
+            for (const filter of activeTextFilters) {
+                const cell = row.querySelector(`td[data-col="${filter.colName}"]`);
+                if (cell && !cell.textContent.toLowerCase().includes(filter.text)) {
+                    matchTextCols = false;
+                    break;
+                }
+            }
+
+            // ③ チェックボックスの判定（完全一致 OR検索）
+            let matchCheckCols = true;
+            for (const col in activeCheckFilters) {
+                const allowedValues = activeCheckFilters[col];
+                const cell = row.querySelector(`td[data-col="${col}"]`);
+                if (cell) {
+                    const cellText = cell.textContent.trim().replace(/\s+/g, ' ');
+                    if (!allowedValues.includes(cellText)) {
+                        matchCheckCols = false;
+                        break;
+                    }
+                }
+            }
+
+            // 全ての条件をクリアした行だけ表示
+            row.style.display = (matchGlobal && matchTextCols && matchCheckCols) ? '' : 'none';
+        });
+        
+        updateCharts(); // グラフも連動して更新
+    }
+
+    // 3. イベントの登録
+    globalSearchInput.addEventListener('input', filterTable);
+    colSearchInputs.forEach(input => input.addEventListener('input', filterTable));
+    
+    // チェックボックスが押されたら発火
+    document.querySelectorAll('.col-check-filter').forEach(chk => {
+        chk.addEventListener('change', filterTable);
+    });
+    
+    // クリアボタンの動作
+    document.querySelectorAll('.clear-col-check').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            const col = this.getAttribute('data-col');
+            document.querySelectorAll(`.col-check-filter[data-col="${col}"]`).forEach(chk => chk.checked = false);
+            filterTable();
+        });
+    });
+    
+
+    const lineCtx = document.getElementById('lineChart').getContext('2d');
+    const scatterCtx = document.getElementById('scatterChart').getContext('2d');
+    let lineChart = new Chart(lineCtx, {
+        type: 'line',
+        data: { labels: [], datasets: [{ data: [], borderColor: '#0d6efd', backgroundColor: 'rgba(13,110,253,0.1)', tension: 0.3, fill: true }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: 'Lot番号' } }, y: { title: { display: true, text: '表示項目' } } } }
+    });
+    let scatterChart = new Chart(scatterCtx, {
+        type: 'scatter',
+        data: { datasets: [{ data: [], backgroundColor: '#198754', pointRadius: 6 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: '原因(X軸)' } }, y: { title: { display: true, text: '結果(Y軸)' } } } }
+    });
+
+    function updateCharts() {
+        const visibleRows = Array.from(document.querySelectorAll('tbody tr')).filter(r => r.style.display !== 'none' && r.querySelector('td[colspan]') === null);
+        const yColLineName = document.getElementById('lineYSelect').value;
+        const xColScatName = document.getElementById('scatterXSelect').value;
+        const yColScatName = document.getElementById('scatterYSelect').value;
+        const lineLabels = [], lineData = [], scatterData = [];
+
+        visibleRows.reverse().forEach(row => {
+            const lot = row.querySelector('.sticky-lot-col').textContent.trim();
+            const yLineCell = row.querySelector(`td[data-col="${yColLineName}"]`);
+            if(yLineCell) {
+                const yValLine = parseFloat(yLineCell.textContent.trim().replace(/,/g, ''));
+                if (!isNaN(yValLine)) { lineLabels.push(lot); lineData.push(yValLine); }
+            }
+            const xScatCell = row.querySelector(`td[data-col="${xColScatName}"]`);
+            const yScatCell = row.querySelector(`td[data-col="${yColScatName}"]`);
+            if(xScatCell && yScatCell) {
+                const xValScat = parseFloat(xScatCell.textContent.trim().replace(/,/g, ''));
+                const yValScat = parseFloat(yScatCell.textContent.trim().replace(/,/g, ''));
+                if (!isNaN(xValScat) && !isNaN(yValScat)) { scatterData.push({ x: xValScat, y: yValScat, lot: lot }); }
+            }
+        });
+        lineChart.data.labels = lineLabels; lineChart.data.datasets[0].data = lineData; lineChart.update();
+        scatterChart.data.datasets[0].data = scatterData; scatterChart.update();
+    }
+    document.getElementById('lineYSelect').addEventListener('change', updateCharts);
+    document.getElementById('scatterXSelect').addEventListener('change', updateCharts);
+    document.getElementById('scatterYSelect').addEventListener('change', updateCharts);
+    updateCharts();
+
+    document.getElementById('toggleGraphBtn').addEventListener('click', function() {
+        const graphContainer = document.getElementById('graphContainer');
+        graphContainer.style.display = (graphContainer.style.display === 'none') ? '' : 'none';
+    });
+    // --- ★ここから追加：比較ダッシュボード遷移ロジック ---
+    // --- ★ 比較ボタン ＆ 全選択・解除ロジック ---
+    const compareBtn = document.getElementById('compareLotsBtn');
+    const masterCheck = document.getElementById('checkAllLots');
+    const compareChecks = document.querySelectorAll('.lot-compare-check');
+
+    // ボタンの状態を更新する共通関数
+    function updateCompareButtonState() {
+        const checkedCount = document.querySelectorAll('.lot-compare-check:checked').length;
+        compareBtn.disabled = checkedCount < 2;
+        
+        // 全てにチェックが入っているか、マスターの状態を同期させる
+        if (masterCheck) {
+            const visibleChecks = Array.from(document.querySelectorAll('.lot-compare-check')).filter(c => c.closest('tr').style.display !== 'none');
+            const checkedVisibleCount = visibleChecks.filter(c => c.checked).length;
+            masterCheck.checked = visibleChecks.length > 0 && checkedVisibleCount === visibleChecks.length;
+            masterCheck.indeterminate = checkedVisibleCount > 0 && checkedVisibleCount < visibleChecks.length;
+        }
+    }
+
+    // 各行のチェックボックスのイベント
+    document.addEventListener('change', function(e) {
+        if (e.target.classList.contains('lot-compare-check')) {
+            updateCompareButtonState();
+        }
+    });
+
+    // マスターチェックボックスのイベント
+    if (masterCheck) {
+        masterCheck.addEventListener('change', function() {
+            // 「現在表示されている行（絞り込み中を含む）」だけを対象にする
+            const visibleRows = Array.from(document.querySelectorAll('tbody tr')).filter(r => r.style.display !== 'none');
+            visibleRows.forEach(row => {
+                const chk = row.querySelector('.lot-compare-check');
+                if (chk) chk.checked = this.checked;
+            });
+            updateCompareButtonState();
+        });
+    }
+    // ＝＝＝ ★ 以下の「比較画面への遷移」ロジックが抜けていたので追加 ＝＝＝
+    compareBtn.addEventListener('click', function() {
+        const checkedBoxes = document.querySelectorAll('.lot-compare-check:checked');
+        const selectedIds = Array.from(checkedBoxes).map(cb => cb.value);
+        
+        if (selectedIds.length >= 2) {
+            const compareUrl = "{% url 'lot_compare' database.pk %}?ids=" + selectedIds.join(',');
+            window.location.href = compareUrl;
+        }
+    });
+    
+    // --- ★ここから修正：フィルターが潜らない＆複数開かない完全対策 ---
+    
+    // 1. 各列のドロップダウンを制御
+    document.querySelectorAll('th .dropdown').forEach(dropdown => {
+        // メニューが開く直前の処理
+        dropdown.addEventListener('show.bs.dropdown', function () {
+            // 他に開いているドロップダウンがあれば、先にすべて閉じる（重なり事故を防ぐ）
+            document.querySelectorAll('th .dropdown.show').forEach(openDropdown => {
+                if (openDropdown !== this) {
+                    const btn = openDropdown.querySelector('[data-bs-toggle="dropdown"]');
+                    const instance = bootstrap.Dropdown.getInstance(btn);
+                    if (instance) instance.hide();
+                }
+            });
+
+            // 今開こうとしている見出し(th)を、全要素の最前面（z-index: 1050）に持ってくる
+            const parentTh = this.closest('th');
+            if(parentTh) {
+                parentTh.style.zIndex = '1050';
+            }
+        });
+
+        // メニューが閉じた時の処理
+        dropdown.addEventListener('hide.bs.dropdown', function () {
+            const parentTh = this.closest('th');
+            if(parentTh) {
+                // 閉じ終わる頃に z-index を元に戻す
+                setTimeout(() => {
+                    parentTh.style.zIndex = '';
+                }, 100);
+            }
+        });
+    });
+
+    // 2. メニュー内のクリックでメニューが勝手に閉じないようにする（チェックボックス操作用）
+    document.querySelectorAll('.dropdown-menu').forEach(menu => {
+        menu.addEventListener('click', function (e) {
+            e.stopPropagation();
+        });
+    });
+    // --- ★ここまで修正 ---
+});
+</script>
+{% endblock content %}

@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<style>
+    /* ホバー時にカードが少し浮き上がるアニメーション */
+    .hover-shadow-up { transition: all 0.3s ease; }
+    .hover-shadow-up:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important; }
+</style>
+
+<div class="row mb-4 align-items-center">
+    <div class="col">
+        <h2 class="fw-bold"><i class="bi bi-building text-primary"></i> ワークスペース一覧</h2>
+        <p class="text-muted mb-0">データ管理を行うワークスペースを選択してください。</p>
+    </div>
+    <div class="col-auto">
+        <a href="{% url 'workspace_create' %}" class="btn btn-primary fw-bold shadow-sm">
+            <i class="bi bi-plus-lg"></i> 新ワークスペースを作成
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    {% for dept in workspaces %}
+    <div class="col-md-4 col-lg-3">
+        <div class="card shadow-sm h-100 border-0 hover-shadow-up">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-folder2-open display-4 text-secondary mb-3"></i>
+                <h5 class="card-title fw-bold mb-4">{{ dept.name }}</h5>
+                <a href="{% url 'database_list' dept.pk %}" class="btn btn-outline-primary stretched-link w-100 fw-bold">
+                    データベース一覧を開く
+                </a>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-12">
+        <div class="alert alert-info text-center py-5 shadow-sm border-0">
+            <i class="bi bi-info-circle display-4 d-block mb-3"></i>
+            <h5 class="fw-bold">ワークスペースが登録されていません</h5>
+            <p class="mb-0">右上の「新規ワークスペースを作成」ボタンから、最初のワークスペースを作成してください。</p>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock content %}

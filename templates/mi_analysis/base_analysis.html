@@ -1,0 +1,158 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'workspace_list' %}">ワークスペース一覧</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'database_list' workspace.pk %}">{{ workspace.name }}</a></li>
+        <li class="breadcrumb-item active" aria-current="page">AIデータ解析（SkillNet Engine）</li>
+    </ol>
+</nav>
+
+<div class="row mb-3 align-items-center">
+    <div class="col">
+        <h2 class="fw-bold mb-0"><i class="bi bi-cpu text-info"></i> AI解析エンジン</h2>
+        <p class="text-muted mt-1 mb-0">複数テーマの統合、多変数同時予測、および目標物性からの配合逆解析を行います。</p>
+    </div>
+    <div class="col-auto">
+        <button type="button" class="btn btn-outline-primary shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#llmPromptModal">
+            <i class="bi bi-robot"></i> 過去の知見をAIに組み込む (LLM連携)
+        </button>
+    </div>
+</div>
+
+<ul class="nav nav-pills nav-fill mb-4 shadow-sm bg-white p-2 rounded" id="analysisTab" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active fw-bold" id="dataset-tab" data-bs-toggle="tab" data-bs-target="#dataset" type="button" role="tab">
+            <i class="bi bi-database-fill-add"></i> 1. データ準備
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link fw-bold" id="explore-tab" data-bs-toggle="tab" data-bs-target="#explore" type="button" role="tab" disabled>
+            <i class="bi bi-graph-up"></i> 2. 可視化・相関
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link fw-bold" id="modeling-tab" data-bs-toggle="tab" data-bs-target="#modeling" type="button" role="tab" disabled>
+            <i class="bi bi-magic"></i> 3. モデル学習
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link fw-bold" id="simulation-tab" data-bs-toggle="tab" data-bs-target="#simulation" type="button" role="tab" >
+            <i class="bi bi-calculator-fill"></i> 4. 逆解析・最適化
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="analysisTabContent">
+    <div class="tab-pane fade show active" id="dataset" role="tabpanel">
+        {% include 'mi_analysis/_phase1_dataset.html' %}
+    </div>
+
+    <div class="tab-pane fade" id="explore" role="tabpanel">
+        {% include 'mi_analysis/_phase2_explore.html' %}
+    </div>
+
+    <div class="tab-pane fade" id="modeling" role="tabpanel">
+        {% include 'mi_analysis/_phase3_modeling.html' %}
+    </div>
+
+    <div class="tab-pane fade" id="simulation" role="tabpanel">
+        {% include 'mi_analysis/_phase4_simulation.html' %}
+    </div>
+</div>
+
+<script>
+    // DjangoのCSRFトークンをCookieから取得する共通関数
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+</script>
+
+<div class="modal fade" id="llmPromptModal" tabindex="-1" aria-labelledby="llmPromptModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-primary text-white border-bottom-0">
+                <h5 class="modal-title fw-bold" id="llmPromptModalLabel">
+                    <i class="bi bi-robot"></i> 会社公認LLMを活用した「過去の知見」の抽出
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 bg-light">
+                <p class="mb-3 text-dark">
+                    過去の実験報告書やWord、PDFなどのテキストデータ、または熟練者のヒアリングメモがある場合、会社公認のLLMに入力して、MIシステムで使える<strong>「計算ルール」</strong>に変換させましょう。
+                </p>
+                
+                <h6 class="fw-bold text-primary mt-4 border-bottom pb-2">📋 LLMコピペ用プロンプト</h6>
+                <p class="small text-muted mb-2">以下のテキストをコピーして、LLM（Gemini等）に貼り付け、最後に手元の報告書テキストを追記して実行してください。</p>
+                
+                <div class="position-relative">
+                    <textarea class="form-control font-monospace text-dark bg-white" id="llmPromptText" rows="18" readonly style="font-size: 0.85rem;">
+<role>
+あなたはマテリアルズ・インフォマティクス（MI）システムを支援する「知識抽出エージェント（KnowledgeExtractionSkill）」です。
+提供される実験報告書や知見テキストから、AIモデルの最適化に必要なルールを抽出し、厳格なフォーマットで出力してください。
+</role>
+
+<rule>
+1. 抽出対象は以下の2種類のみとします。
+   - Feature (特徴量): 既存の変数を組み合わせた新しい指標や計算式（例: 濃度 = Aの量 / 全体量）
+   - Constraint (制約条件): 物理的・化学的にあり得ない、または危険なNG条件（例: 反応温度 < 150）
+2. 曖昧な表現は避け、システム（Python等）がそのまま解釈しやすい論理式や数式に変換してください。
+3. 指定されたフォーマット以外の無駄な挨拶や解説は一切出力しないでください。
+</rule>
+
+<output_format>
+以下の構造化フォーマットで出力してください。
+
+- 種類: [Feature または Constraint]
+- 対象項目: [関係する項目名]
+- 式: [計算式または条件式]
+- 根拠: [テキスト内の該当部分]
+</output_format>
+
+<input_text>
+（※ここに手元のテキストデータを貼り付けてください）
+</input_text>
+</textarea>
+                    <button class="btn btn-sm btn-dark position-absolute top-0 end-0 m-2" onclick="navigator.clipboard.writeText(document.getElementById('llmPromptText').value); alert('プロンプトをコピーしました！');">
+                        <i class="bi bi-clipboard"></i> コピー
+                    </button>
+                </div>
+
+                <h6 class="fw-bold text-success mt-4 border-bottom pb-2"><i class="bi bi-arrow-return-right"></i> LLMの出力結果をどうシステムに使うか？</h6>
+                <div class="row g-3 mt-1">
+                    <div class="col-md-6">
+                        <div class="card border-0 shadow-sm h-100 border-start border-primary border-4">
+                            <div class="card-body">
+                                <h6 class="small fw-bold text-primary">LLMが「特徴量」を出力した場合</h6>
+                                <p class="small text-muted mb-0">Phase 1のデータ準備に戻り、Excel等の元データで新しい列（例：A/Bの比率）を計算して追加してから、再度データセットを生成します。</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card border-0 shadow-sm h-100 border-start border-danger border-4">
+                            <div class="card-body">
+                                <h6 class="small fw-bold text-danger">LLMが「制約条件」を出力した場合</h6>
+                                <p class="small text-muted mb-0">Phase 4（逆解析・最適化）を実行する際に、この条件を手動で設定して、AIが危険な配合を提案しないようにガードをかけます。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock content %}

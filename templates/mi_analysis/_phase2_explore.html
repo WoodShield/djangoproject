@@ -1,0 +1,287 @@
+<div class="row">
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0 mb-4 h-100">
+            <div class="card-header bg-light fw-bold d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-funnel-fill"></i> 分析対象の選択</span>
+                <button type="button" class="btn btn-sm btn btn-outline-success fw-bold" data-bs-toggle="modal" data-bs-target="#dataTipsModal">
+                    <i class="bi bi-lightbulb-fill text-warning"></i> データ選びのコツ
+                </button>
+            </div>
+            <div class="card-body">
+                <form id="exploreConfigForm">
+                    <div class="mb-4">
+                        <label class="form-label fw-bold small text-primary">1. 予測したい項目 (目的変数: Y)</label>
+                        <div class="border rounded p-2 bg-white" style="max-height: 180px; overflow-y: auto;" id="targetRadios">
+                            <p class="text-muted small text-center my-3">（データ未生成）</p>
+                        </div>
+                        <div class="form-text small mt-1">例：「粘度」や「水分」など、最終的に最適化・予測したい結果を選びます。</div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold small text-primary">2. 原因となりうる項目 (説明変数: X)</label>
+                        <div class="border rounded p-2 bg-white" style="max-height: 250px; overflow-y: auto;" id="featureCheckboxes">
+                            <p class="text-muted small text-center my-3">（データ未生成）</p>
+                        </div>
+                        <div class="form-text small mt-1">※関係なさそうな項目（Lot番号など）や、常に一定の数値しか入っていない項目はチェックを外してください。</div>
+                    </div>
+
+                    <button type="button" id="drawGraphsBtn" class="btn btn-primary w-100 fw-bold shadow-sm" disabled>
+                        <i class="bi bi-bar-chart-line-fill"></i> グラフを描画・相関を計算
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white border-bottom fw-bold">
+                <i class="bi bi-graph-up"></i> 探索的データ解析 (EDA) ダッシュボード
+            </div>
+            
+            <div class="card-body bg-light rounded-bottom p-3" style="min-height: 500px; overflow-y: auto;">
+                
+                <div id="explorePlaceholder" class="text-center text-muted p-5 w-100 h-100 d-flex flex-column justify-content-center align-items-center">
+                    <i class="bi bi-pie-chart display-4 mb-3 d-block"></i>
+                    <h5>左のパネルで項目を選択してください</h5>
+                    <p class="small mb-0">「グラフを描画」を押すと、ここに相関ヒートマップと<br>各項目の散布図・箱ひげ図が表示されます。</p>
+                </div>
+
+                <div id="exploreChartsContainer" class="d-none">
+                    <div class="card border-0 shadow-sm mb-4">
+                        <div class="card-body">
+                            <h6 class="fw-bold text-center mb-3">項目間の相関ヒートマップ (ピアソン相関係数)</h6>
+                            <div id="heatmapDiv" style="width: 100%; height: 400px;"></div>
+                        </div>
+                    </div>
+                    
+                    <h6 class="fw-bold border-bottom pb-2 mb-3 mt-4">目的変数に対する各項目の影響</h6>
+                    <div class="row g-3" id="scatterPlotsDiv">
+                        </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="dataTipsModal" tabindex="-1" aria-labelledby="dataTipsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-info text-dark border-bottom-0">
+                <h5 class="modal-title fw-bold" id="dataTipsModalLabel"><i class="bi bi-lightbulb-fill text-warning"></i> 精度を上げる特徴量（入力データ）の選び方</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 text-dark bg-light">
+                
+                <p class="mb-4">精度の高いAIモデルを作るためには、<strong>「AIが学習しやすいデータ（特徴量）」</strong>を人間が選んであげる必要があります。以下の3つのポイントを意識して、左のパネルから項目を選んでみましょう。</p>
+
+                <div class="row g-4">
+                    <div class="col-md-12">
+                        <div class="card border-0 shadow-sm h-100 border-start border-primary border-4">
+                            <div class="card-body">
+                                <h6 class="fw-bold text-primary"><i class="bi bi-1-circle-fill"></i> 「常に同じ値」の項目は外す（ばらつきの重要性）</h6>
+                                <p class="small text-muted mb-0">
+                                    たとえば、過去の実験すべてで「攪拌速度: 100rpm」だった場合、その項目は結果（粘度など）の違いを説明できません。<strong>数値に変化（ばらつき）がない項目は、分析のノイズになるためチェックを外しましょう。</strong>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-12">
+                        <div class="card border-0 shadow-sm h-100 border-start border-success border-4">
+                            <div class="card-body">
+                                <h6 class="fw-bold text-success"><i class="bi bi-2-circle-fill"></i> 「似た者同士」の項目はどちらか1つにする（多重共線性）</h6>
+                                <p class="small text-muted mb-0">
+                                    たとえば「原料Aの添加量(g)」と「原料Aの添加割合(%)」のように、<strong>実質的に同じ意味を持つ項目を両方入れると、AIが混乱します（多重共線性）。</strong>ヒートマップで相関係数が「1.0」やそれに近い項目同士を見つけたら、どちらか一方だけを残すのがコツです。
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-12">
+                        <div class="card border-0 shadow-sm h-100 border-start border-danger border-4">
+                            <div class="card-body">
+                                <h6 class="fw-bold text-danger"><i class="bi bi-3-circle-fill"></i> 結果を知っている項目（事後データ）は外す</h6>
+                                <p class="small text-muted mb-0">
+                                    これから「粘度」を予測するモデルを作るのに、入力データに「合格/不合格」といった<strong>実験が終わった後でないと分からないデータ</strong>を含めると、AIは「ズル」をしてしまいます（データリーケージ）。入力（X）には、実験の<strong>前</strong>に決められる条件（配合量や温度など）だけを選びましょう。
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-footer bg-white border-top-0">
+                <button type="button" class="btn btn-secondary fw-bold px-4" data-bs-dismiss="modal">閉じる</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.plot.ly/plotly-2.24.1.min.js" charset="utf-8"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const drawBtn = document.getElementById('drawGraphsBtn');
+    const explorePlaceholder = document.getElementById('explorePlaceholder');
+    const exploreChartsContainer = document.getElementById('exploreChartsContainer');
+    const heatmapDiv = document.getElementById('heatmapDiv');
+    const scatterPlotsDiv = document.getElementById('scatterPlotsDiv');
+
+    // Phase 1完了時にカラムを受け取ってUIを更新するイベント
+    window.updateExploreFields = function(columns) {
+        // targetVariable(select)からtargetRadios(div)へ変更
+        const targetBox = document.getElementById('targetRadios');
+        const featureBox = document.getElementById('featureCheckboxes');
+        
+        // 目的変数(Y)のラジオボタン生成 (数値のみ)
+        targetBox.innerHTML = '';
+        if (columns.numeric.length === 0) {
+            targetBox.innerHTML = '<p class="text-muted small mb-0">予測できる数値項目がありません</p>';
+        } else {
+            columns.numeric.forEach((col, index) => {
+                // 一番上の項目をデフォルトで選択状態(checked)にしておく
+                const isChecked = index === 0 ? 'checked' : '';
+                targetBox.innerHTML += `
+                    <div class="form-check">
+                        <input class="form-check-input target-radio" type="radio" name="target_variable" value="${col}" id="radio_${col}" ${isChecked}>
+                        <label class="form-check-label small" for="radio_${col}">${col}</label>
+                    </div>`;
+            });
+        }
+
+        // 説明変数(X)のチェックボックス生成
+        featureBox.innerHTML = '';
+        columns.all.forEach(col => {
+            if (['テーマ名', 'Lot番号', '実験日', '担当者', '評価メモ'].includes(col)) return;
+            
+            // div に id を、input に feature-chk クラスを追加！
+            featureBox.innerHTML += `
+                <div class="form-check" id="feature_wrapper_${col}">
+                    <input class="form-check-input feature-chk" type="checkbox" name="feature_xs" value="${col}" id="chk_${col}">
+                    <label class="form-check-label small" for="chk_${col}">${col}</label>
+                </div>`;
+        });
+        
+        drawBtn.disabled = false;
+        // ＝＝＝  YとXの排他制御ロジック ＝＝＝
+        const syncExclusivity = () => {
+            const selectedY = document.querySelector('input[name="target_variable"]:checked')?.value;
+            const featureChks = document.querySelectorAll('.feature-chk');
+            
+            featureChks.forEach(chk => {
+                const wrapper = document.getElementById(`feature_wrapper_${chk.value}`);
+                if (chk.value === selectedY) {
+                    // Yで選ばれた項目はチェックを外し、操作不可にしてグレーアウト
+                    chk.checked = false;
+                    chk.disabled = true;
+                    wrapper.classList.add('text-muted', 'opacity-50');
+                } else {
+                    // それ以外は操作可能に戻す
+                    chk.disabled = false;
+                    wrapper.classList.remove('text-muted', 'opacity-50');
+                }
+            });
+        };
+
+        // ラジオボタンが切り替わるたびにチェックを走らせる
+        document.querySelectorAll('.target-radio').forEach(radio => {
+            radio.addEventListener('change', syncExclusivity);
+        });
+
+        // 初回ロード時にも1回実行して、初期選択されているYをXからロックする
+        syncExclusivity();
+        // ＝＝＝ ここまで追加 ＝＝＝
+    };
+
+    drawBtn.addEventListener('click', function() {
+        // プルダウンではなく、選択されたラジオボタンの値を取得する
+        const targetRadio = document.querySelector('input[name="target_variable"]:checked');
+        const targetY = targetRadio ? targetRadio.value : null;
+        
+        const selectedXs = Array.from(document.querySelectorAll('input[name="feature_xs"]:checked')).map(cb => cb.value);
+
+        if (!targetY) { alert('目的変数を選択してください。'); return; }
+        if (selectedXs.length === 0) { alert('説明変数を1つ以上選択してください。'); return; }
+
+        
+
+        drawBtn.disabled = true;
+        drawBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 計算中...';
+
+
+        fetch("{% url 'api_get_eda_results' workspace.pk %}", {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+            body: JSON.stringify({ target_variable: targetY, feature_variables: selectedXs })
+        })
+        .then(response => response.json())
+        // ＝＝＝  async を追加して非同期処理を可能にする ＝＝＝
+        .then(async data => { 
+            if (data.status === 'success') {
+                explorePlaceholder.classList.add('d-none');
+                exploreChartsContainer.classList.remove('d-none');
+
+                // 1. 相関ヒートマップの描画 
+                const corr = data.correlation;
+                const heatmapTrace = {
+                    z: corr.z, x: corr.x, y: corr.y,
+                    type: 'heatmap', colorscale: 'RdBu', zmin: -1, zmax: 1
+                };
+                
+                // 選択された項目が20個以下なら、文字が潰れないと判断して数値を表示する
+                if (corr.x.length <= 20) {
+                    heatmapTrace.text = corr.z;
+                    heatmapTrace.texttemplate = '%{text}';
+                    heatmapTrace.textfont = {size: 10};
+                }
+
+                Plotly.newPlot(heatmapDiv, [heatmapTrace], { margin: { t: 30, b: 50, l: 100 } });
+
+                // 2. 個別グラフの描画 (フリーズ対策：1つずつ順番に描画する)
+                scatterPlotsDiv.innerHTML = '';
+                
+                for (let i = 0; i < data.plots.length; i++) {
+                    const plot = data.plots[i];
+                    const colId = `plot_${i}`;
+                    const colDiv = document.createElement('div');
+                    colDiv.className = 'col-md-6';
+                    colDiv.innerHTML = `<div class="card border-0 shadow-sm"><div class="card-body">
+                        <h6 class="small fw-bold text-center">${plot.column_name} vs ${targetY}</h6>
+                        <div id="${colId}" style="height: 300px;"></div>
+                    </div></div>`;
+                    scatterPlotsDiv.appendChild(colDiv);
+
+                    const trace = {
+                        x: plot.x_data, y: plot.y_data,
+                        mode: 'markers', type: plot.type,
+                        marker: { opacity: 0.6, size: 8 }
+                    };
+                    Plotly.newPlot(colId, [trace], {
+                        margin: { t: 10, b: 40, l: 40, r: 10 },
+                        xaxis: { title: { text: plot.column_name, font: { size: 10 } } },
+                        yaxis: { title: { text: targetY, font: { size: 10 } } }
+                    });
+
+                    // ＝＝＝ ★修正の肝: 次のグラフを描く前に、ブラウザを10ミリ秒休ませる ＝＝＝
+                    // これにより画面がフリーズせず、描画中のグラフから順番に表示されます
+                    await new Promise(resolve => setTimeout(resolve, 10));
+                }
+            } else {
+                alert(data.message);
+            }
+        })
+        .catch(error => {
+            alert('通信エラーが発生しました: ' + error.message);
+        })
+        .finally(() => {
+            // すべてのグラフの描画が終わったら、ボタンを元の状態に戻す
+            drawBtn.disabled = false;
+            drawBtn.innerHTML = '<i class="bi bi-bar-chart-line-fill"></i> グラフを描画・相関を計算';
+           
+            
+        });
+    });
+});
+</script>

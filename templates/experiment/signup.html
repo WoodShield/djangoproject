@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-5 mt-4 mb-5">
+        <h3 class="text-center fw-bold mb-4"><i class="bi bi-person-plus-fill text-primary"></i> 新規ユーザー登録</h3>
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    {% for field in form %}
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">{{ field.label }}</label>
+                            {{ field }}
+                            
+                            {% if field.help_text %}
+                                <div class="form-text small text-muted">{{ field.help_text|safe }}</div>
+                            {% endif %}
+                            
+                            {% for error in field.errors %}
+                                <div class="text-danger small mt-1 fw-bold"><i class="bi bi-exclamation-triangle"></i> {{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endfor %}
+                    
+                    <button type="submit" class="btn btn-primary w-100 fw-bold mt-4 py-2">
+                        登録してログイン
+                    </button>
+                </form>
+            </div>
+        </div>
+        <div class="alert alert-secondary mt-3 mb-0 py-2 small shadow-sm border-0">
+            <i class="bi bi-info-circle-fill  "></i> 
+            <strong>登録後のお願い：</strong><br>
+            <strong>「登録してログインした後、自動的にマイページへ移動します。データベース等の機能を利用するためには、必ずマイページで所属部署」の設定を行ってください。</strong>
+        </div>
+        
+        <div class="text-center mt-3">
+            <a href="{% url 'login' %}" class="text-decoration-none text-secondary">
+                <i class="bi bi-arrow-left"></i> ログイン画面に戻る
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Djangoが自動生成する入力欄(input)にBootstrapのスタイルを適用する
+        document.querySelectorAll('input').forEach(el => {
+            if (el.type !== 'submit' && el.type !== 'hidden') {
+                el.classList.add('form-control');
+            }
+        });
+    });
+</script>
+{% endblock %}
