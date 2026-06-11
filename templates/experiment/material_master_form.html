@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block content %}
+<style>
+    /* 選択中（フォーカス時）の入力欄を黄色く強調する（Lot画面とデザイン統一） */
+    input.form-control:focus, 
+    select.form-control:focus, 
+    textarea.form-control:focus {
+        background-color: #fffacd !important; /* 薄い黄色 */
+        border-color: #ffc107 !important;     /* 枠線も黄色系に強調 */
+        color: #000 !important;               /* 文字色は黒ではっきりと */
+        box-shadow: 0 0 0 0.25rem rgba(255, 193, 7, 0.25) !important; /* 外側のぼかしも黄色に */
+        transition: background-color 0.2s ease-in-out;
+    }
+</style>
+
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'workspace_list' %}">ワークスペース一覧</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'master_list' %}">物性マスター一覧</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{% if object %}データ編集{% else %}新規データ登録{% endif %}</li>
+  </ol>
+</nav>
+
+<div class="row mb-4">
+    <div class="col">
+        <h2 class="fw-bold">
+            {% if object %}
+                <i class="bi bi-pencil-square text-primary"></i> マスターデータ編集 <span class="fs-5 text-muted">(ID: {{ object.id }})</span>
+            {% else %}
+                <i class="bi bi-plus-square text-success"></i> 新規マスターデータ登録
+            {% endif %}
+        </h2>
+    </div>
+</div>
+{% if not object %}
+<div class="col-md-10 col-lg-8 mx-auto mb-3 text-end">
+    <a href="{% url 'master_import' %}" class="btn btn-outline-success fw-bold shadow-sm">
+        <i class="bi bi-file-earmark-spreadsheet"></i> Excel / CSV から一括登録する
+    </a>
+</div>
+{% endif %}
+
+<div class="card shadow-sm border-0 col-md-10 col-lg-8 mx-auto mb-5">
+    <div class="card-body p-4">
+        <form method="post" id="masterForm">
+            {% csrf_token %}
+            
+            {% for prop in properties %}
+            <div class="mb-4">
+                <label class="form-label fw-bold">{{ prop.property_key }} <span class="badge bg-secondary ms-2">{{ prop.get_data_type_display }}</span></label>
+                
+                {% if prop.data_type == 'number' %}
+                    <input type="number" step="any" name="prop_{{ prop.property_key }}" class="form-control form-control-lg" 
+                           value="{{ existing_values|get_item:prop.property_key|default:'' }}">
+                {% elif prop.data_type == 'long_text' %}
+                    <textarea name="prop_{{ prop.property_key }}" class="form-control" rows="3">{{ existing_values|get_item:prop.property_key|default:'' }}</textarea>
+                {% else %}
+                    <input type="text" name="prop_{{ prop.property_key }}" class="form-control form-control-lg" 
+                           value="{{ existing_values|get_item:prop.property_key|default:'' }}">
+                {% endif %}
+            </div>
+            {% empty %}
+            <div class="alert alert-warning shadow-sm">
+                <i class="bi bi-exclamation-triangle-fill text-warning"></i> 項目が一つも設定されていません。「項目設定」画面から先に項目を定義してください。
+            </div>
+            {% endfor %}
+
+            <div class="text-end mt-5 border-top pt-4">
+                <a href="{% url 'master_list' %}" class="btn btn-secondary me-2 px-4 fw-bold">キャンセル</a>
+                <button type="submit" class="btn btn-primary fw-bold px-5 shadow-sm">
+                    {% if object %}変更を保存{% else %}データを登録{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock content %}

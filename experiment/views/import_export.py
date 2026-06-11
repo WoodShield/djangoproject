@@ -52,16 +52,14 @@ class LotDataImportView(UpdateView):
                     if not row.get('Lot番号') or pd.isna(row.get('Lot番号')):
                         continue
 
-                    # ★ 必須項目「実験日」が空ならスキップ
                     raw_date = row.get('実験日')
-                    if not raw_date or pd.isna(raw_date):
-                        continue
-                        
-                    # 実験日のパース（日付として認識できない文字が入っていた場合もスキップ）
-                    try:
-                        recorded_date = pd.to_datetime(raw_date).date()
-                    except:
-                        continue
+                    if pd.isna(raw_date):
+                        recorded_date = None  # 空欄ならNone（未入力）として扱う
+                    else:
+                        try:
+                            recorded_date = pd.to_datetime(raw_date).date()
+                        except (ValueError, TypeError):
+                            recorded_date = None  # 無効な文字が入っていてもNoneとして扱う
 
                     # JSONに入れる動的データの抽出
                     experimental_data = {}
@@ -70,10 +68,16 @@ class LotDataImportView(UpdateView):
                             val = row.get(item_name)
                             # 空欄（NaNやNone）じゃない場合だけ処理
                             if pd.notna(val) and val is not None:
-                                # ★魔法の1行：Numpy型(int64, float64等)をPython標準型に変換！
+                                # Numpy型(int64, float64等)をPython標準型に変換！
                                 if hasattr(val, 'item'):
                                     val = val.item()
                                 
+                                # ＝＝＝ 自動クレンジング ＝＝＝
+                                # 文字データ（文字列）だった場合、前後のスペース（全角・半角）や改行を自動で削除する
+                                if isinstance(val, str):
+                                    val = val.strip()
+                                # ＝＝＝ 追加ここまで ＝＝＝
+
                                 experimental_data[item_name] = val
 
                     # ＝＝＝ ↓ 新しい「上書き＆追記」の処理 ↓ ＝＝＝
@@ -161,7 +165,8 @@ class ThemeItemImportView(UpdateView):
                         database=database,
                         order=next_order,
                         item_name=col_name,
-                        data_type='text', # 一旦すべて「文字」として仮登録する
+                        # ★修正: 初期状態のデータ型を「数字」に設定
+                        data_type='number', 
                         
                         use_for_anomaly=False,
                         is_active=True
@@ -169,7 +174,8 @@ class ThemeItemImportView(UpdateView):
                     next_order += 1
                     added_count += 1
 
-                messages.success(request, f'{added_count}個の項目を追加しました！「データの種類」や「AI対象」を修正して保存してください。')
+                # ★修正: メッセージを実態に合わせて変更
+                messages.success(request, f'{added_count}個の項目を追加しました！初期状態は「数字」に設定されています。必要に応じて「データの種類」や「AI対象」を修正して保存してください。')
                 # 抽出完了後は、データ項目設定画面にリダイレクトしてユーザーに修正させる
                 return redirect('database_settings', pk=database.pk)
 

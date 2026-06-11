@@ -456,7 +456,17 @@ document.addEventListener('DOMContentLoaded', function() {
                         matrix.push(row);
                     }
                     const trace = { z: matrix, x: numericItems, y: numericItems, type: 'heatmap', colorscale: 'RdBu', zmin: -1, zmax: 1, text: matrix.map(r => r.map(v => v.toFixed(2))), texttemplate: "%{text}", hoverinfo: "x+y+text" };
-                    Plotly.newPlot('plotlyMain', [trace], { title: `項目間の相関ヒートマップ (対象: ${filteredData.length}件)`, margin: {l: 120, b: 120, t: 40, r: 20} }, {responsive: true});
+                    Plotly.newPlot('plotlyMain', [trace], { 
+                        title: `項目間の相関ヒートマップ (対象: ${filteredData.length}件)`, 
+                        margin: {l: 150, b: 120, t: 40, r: 20},
+                        xaxis: { 
+                            automargin: true, 
+                            tickangle: -45 
+                        },
+                        yaxis: { 
+                            automargin: true 
+                        }
+                    }, {responsive: true});
 
                 } else if (chartType === 'parcoords') {
                     axisDiv.style.display = 'flex';

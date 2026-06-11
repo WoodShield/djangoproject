@@ -1,19 +1,20 @@
 from django.urls import path
-from .views.workspace_views import WorkspaceListView, WorkspaceCreateView,WorkspaceUpdateView
+from .views.workspace_views import WorkspaceListView, WorkspaceCreateView, WorkspaceUpdateView
 
 from .views.database_views import ThemeListView, ThemeCreateView, ThemeSettingsView, DatabaseUpdateView
-from .views.lot_views import LotListView, LotCreateView, LotUpdateView, BatchRecheckAnomalyView, LotComparisonView
+from .views.lot_views import LotListView, LotCreateView, LotUpdateView, BatchRecheckAnomalyView, LotComparisonView, batch_recalculate_all
 from .views.import_export import LotDataImportView, ThemeItemImportView, ThemeExportView, LotDataExportView
 
 # analysis_viewsからはPhase 1と2のAPIのみをインポート
-from .views.analysis_views import LotAnalysisView, MLAnalysisView, MIAnalysisView, api_generate_mi_dataset, api_get_eda_results, api_curate_dataset, download_curated_data
-
+from .views.analysis_views import LotAnalysisView, MLAnalysisView, MIAnalysisView, api_generate_mi_dataset, api_get_eda_results, api_curate_dataset, download_curated_data, api_exclude_lots, api_convert_smiles
 # mi_model_viewsからPhase 3と4のAPIをまとめてインポート
-from .views.mi_model_views import api_train_multi_models, api_get_saved_models, api_optimize_recipe,api_register_model, api_delete_model
+from .views.mi_model_views import api_train_multi_models, api_get_saved_models, api_optimize_recipe, api_register_model, api_delete_model
 
 from django.contrib.auth import views as auth_views 
 from .views.auth_views import MyPageView, OrganizationCreateView, SignUpView
 
+# ★ 新しく作成したマスター管理用のビューをインポート
+from .views.master_views import MaterialMasterListView, MaterialMasterSettingsView, MaterialMasterFormView, MaterialMasterImportView,MaterialItemImportView,MaterialExportView
 
 
 urlpatterns = [
@@ -26,7 +27,6 @@ urlpatterns = [
     path('organization/create/', OrganizationCreateView.as_view(), name='organization_create'),
     # 新規ユーザー登録URL
     path('signup/', SignUpView.as_view(), name='signup'),
-
 
     # --- 1階層目: ワークスペース（部署） ---
     path('', WorkspaceListView.as_view(), name='workspace_list'),
@@ -44,6 +44,8 @@ urlpatterns = [
     path('dept/<int:dept_pk>/api/dataset/generate/', api_generate_mi_dataset, name='api_generate_mi_dataset'),
     path('workspace/<int:dept_pk>/api/curate/', api_curate_dataset, name='api_curate_dataset'),
     path('workspace/<int:dept_pk>/api/curate/download/', download_curated_data, name='download_curated_data'),
+    path('workspace/<int:workspace_pk>/api/dataset/exclude/',api_exclude_lots, name='api_exclude_lots'),
+    path('dept/<int:dept_pk>/api/smiles/convert/', api_convert_smiles, name='api_convert_smiles'),
     
     # Phase 2: EDA（可視化・相関）用のAPIエンドポイント
     path('dept/<int:dept_pk>/api/eda/', api_get_eda_results, name='api_get_eda_results'),
@@ -62,7 +64,7 @@ urlpatterns = [
     # テーマ一覧のCSV出力
     path('databases/export/', ThemeExportView.as_view(), name='database_export'), 
 
-    # --- 3階層目以降: テーマ詳細・Lotデータ（ワークスペースIDに依存させず独立） ---
+    # --- 3階層目以降: テーマ詳細・Lotデータ ---
     path('database/<int:pk>/lots/', LotListView.as_view(), name='lot_list'),
     path('database/<int:pk>/settings/', ThemeSettingsView.as_view(), name='database_settings'),
     path('database/<int:pk>/analysis/', LotAnalysisView.as_view(), name='lot_analysis'),
@@ -75,7 +77,19 @@ urlpatterns = [
     path('database/<int:pk>/lots/compare/', LotComparisonView.as_view(), name='lot_compare'),
     path('database/<int:pk>/export-lots/', LotDataExportView.as_view(), name='lot_export'),
     path('database/<int:pk>/import-data/', LotDataImportView.as_view(), name='lot_import'),
+    path('database/<int:pk>/recalculate/', batch_recalculate_all, name='batch_recalculate_all'),
     
     # 項目設定のExcelインポート
     path('database/<int:pk>/import-items/', ThemeItemImportView.as_view(), name='database_item_import'),
+
+    # ==========================================
+    # ★ 物性マスター管理 (Lotデータと完全同一アーキテクチャ)
+    # ==========================================
+    path('master/', MaterialMasterListView.as_view(), name='master_list'),
+    path('master/settings/', MaterialMasterSettingsView.as_view(), name='master_settings'),
+    path('master/settings/import-items/', MaterialItemImportView.as_view(), name='master_item_import'),
+    path('master/create/', MaterialMasterFormView.as_view(), name='master_create'),
+    path('master/<int:pk>/update/', MaterialMasterFormView.as_view(), name='master_update'),
+    path('master/import/', MaterialMasterImportView.as_view(), name='master_import'),
+    path('master/export/', MaterialExportView.as_view(), name='master_export'),
 ]

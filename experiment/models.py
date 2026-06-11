@@ -167,8 +167,8 @@ class DatabaseItemDefinition(models.Model):
     item_name = models.CharField("項目名", max_length=100)
     
     DATA_TYPE_CHOICES = (
-        ('text', '文字（短文）'),
         ('number', '数字'),
+        ('text', '文字（短文）'),
         ('calc', '計算（自動算出）'),
         ('image', '画像'),
         ('file', 'ファイル添付'),
@@ -177,6 +177,7 @@ class DatabaseItemDefinition(models.Model):
         ('date', '日付'),
         ('time', '時刻'),
         ('long_text', '長文テキスト（所感など）'),
+        ('material', '材料/物質（マスター辞書連携）'),
     )
     data_type = models.CharField("データの種類", max_length=20, choices=DATA_TYPE_CHOICES)
     
@@ -209,7 +210,7 @@ class LotData(models.Model):
     """ 各データのLot別データ（日々の実験結果） """
     database = models.ForeignKey(Database, on_delete=models.CASCADE, verbose_name="データベース", related_name="lots")
     lot_number = models.CharField("Lot番号", max_length=50)
-    recorded_date = models.DateField("実験日")
+    recorded_date = models.DateField("実験日", null=True, blank=True)
     recorded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="担当者")
     
     experimental_data = models.JSONField("実験データ（条件・結果）", default=dict, blank=True)
@@ -282,3 +283,55 @@ class TrainedModelMetadata(models.Model):
         if isinstance(r2_score, float):
             r2_score = round(r2_score, 3)
         return f"{self.database.name} - Y:{self.target_variable} (R2: {r2_score})"
+
+
+
+
+# --- 権限管理はそのまま維持 ---
+class MasterDataPermission(models.Model):
+    allowed_orgs = models.ManyToManyField('Organization', blank=True, related_name='allowed_master_management')
+    allowed_users = models.ManyToManyField(User, blank=True, related_name='allowed_master_management')
+    
+    @classmethod
+    def can_manage(cls, user):
+        if user.is_superuser: return True
+        obj = cls.objects.first()
+        if not obj: return False
+        if obj.allowed_users.filter(id=user.id).exists(): return True
+        if hasattr(user, 'profile') and user.profile.organization:
+            if obj.allowed_orgs.filter(id=user.profile.organization.id).exists(): return True
+        return False
+
+# --- 新・項目定義 (Lotデータの settings と同一) ---
+class MaterialPropertyDefinition(models.Model):
+    DATA_TYPE_CHOICES = [('number', '数値'), ('text', '短文'), ('long_text', '長文')]
+    property_key = models.CharField('項目名キー', max_length=100, unique=True)
+    data_type = models.CharField('データ型', max_length=20, choices=DATA_TYPE_CHOICES, default='text')
+    order = models.IntegerField('表示順', default=0)
+
+    # ★ 追加: ワークスペースへの紐付け (null=True は「全社共有マスター」を意味する)
+    workspace = models.ForeignKey('Workspace', on_delete=models.CASCADE, null=True, blank=True, verbose_name="ワークスペース")
+
+    class Meta:
+        ordering = ['order']
+        # ★ ワークスペース内でキー（項目名）が重複しないようにする安全装置
+        unique_together = [['workspace', 'property_key']]
+
+# --- 新・マスター本体 (Lotデータと同じ「箱」) ---
+class Material(models.Model):
+    workspace = models.ForeignKey('Workspace', on_delete=models.CASCADE, null=True, blank=True, verbose_name="ワークスペース")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        # 名前やCAS番号も MaterialValue から取得するようにします
+        return f"Material {self.id}"
+
+# --- 新・値テーブル (Lotデータと同じ「中身」) ---
+class MaterialValue(models.Model):
+    material = models.ForeignKey(Material, on_delete=models.CASCADE, related_name='values')
+    definition = models.ForeignKey(MaterialPropertyDefinition, on_delete=models.CASCADE)
+    value = models.TextField(blank=True, null=True)
+
+    class Meta:
+        unique_together = ('material', 'definition')

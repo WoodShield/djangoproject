@@ -1,6 +1,18 @@
 {% extends 'base.html' %}
 
 {% block content %}
+<style>
+    /* 選択中（フォーカス時）の入力欄を黄色く強調する */
+    input.form-control:focus, 
+    select.form-control:focus, 
+    textarea.form-control:focus {
+        background-color: #fffacd !important; /* 薄い黄色 */
+        border-color: #ffc107 !important;     /* 枠線も黄色系に強調 */
+        color: #000 !important;               /* 文字色は黒ではっきりと */
+        box-shadow: 0 0 0 0.25rem rgba(255, 193, 7, 0.25) !important; /* 外側のぼかしも黄色に */
+        transition: background-color 0.2s ease-in-out;
+    }
+</style>
 <nav aria-label="breadcrumb">
   <ol class="breadcrumb">
     <li class="breadcrumb-item"><a href="{% url 'workspace_list' %}">ワークスペース一覧</a></li>
@@ -106,6 +118,136 @@
     </div>
 </div>
 
+</form>
+    </div>
+</div>
+
+<div class="modal fade" id="voiceHelpModal" tabindex="-1" aria-labelledby="voiceHelpModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg"> 
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-light">
+        <h5 class="modal-title fw-bold text-dark" id="voiceHelpModalLabel">
+            <i class="bi bi-mic-fill text-danger"></i> 音声入力の使い方
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+      </div>
+      <div class="modal-body">
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="alert alert-warning py-2 mb-3 small h-100">
+                    <div class="mb-2">
+                        <strong><i class="bi bi-1-circle-fill text-warning"></i> はじめに</strong><br>
+                        「開始」で緑色の<strong>「入力中...」</strong>になります。<br>入力中にならない場合は「マイクが起動しない時」の内容を確認してください。
+                        <br><span class="text-danger fw-bold">※約15秒間無音だと自動終了します。</span>
+                    </div>
+                    <div class="mb-2">
+                        <strong><i class="bi bi-plus-circle-fill text-primary"></i> 自動復旧設定</strong><br>
+                        <strong>「自動復旧：ON」</strong>にすると、無音終了時も自動で再起動し、入力を維持します。
+                    </div>
+                    <div class="mb-2">
+                        <strong><i class="bi bi-2-circle-fill text-warning"></i> 入力場所</strong><br>
+                        入力中の枠は<strong>背景が黄色</strong>になります。
+                    </div>
+                    <div>
+                        <strong><i class="bi bi-3-circle-fill text-warning"></i> 注意</strong><br>
+                        <span class="text-danger fw-bold">数値入力専用です。</span>文字入力はできません。<br>
+                        <span class="text-danger fw-bold">データは上書きされるます。</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <p class="fw-bold mb-2 border-bottom pb-1 small">使える音声コマンド一覧</p>
+                <ul class="list-group list-group-flush mb-3 small">
+                  <li class="list-group-item px-1">
+                    <strong>「次」 / 「次へ」</strong><br>
+                    <span class="text-muted">黄色いハイライトを次の入力枠へ移動します。</span>
+                  </li>
+                  <li class="list-group-item px-1">
+                    <strong>「前」 / 「前へ」</strong><br>
+                    <span class="text-muted">黄色いハイライトを前の入力枠へ戻します。</span>
+                  </li>
+                  <li class="list-group-item px-1">
+                    <strong>「クリア」 / 「消去」</strong><br>
+                    <span class="text-muted">黄色い枠の数値を空にします。</span>
+                  </li>
+                  <li class="list-group-item px-1">
+                    <strong>数値の発声 <span class="text-primary">（例：「15.5」）</span></strong><br>
+                    <span class="text-muted">黄色い枠にその数値を直接入力します。</span>
+                  </li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="alert alert-info py-2 small mb-0 mt-2">
+            <i class="bi bi-info-circle"></i> うまく認識されない場合は、はっきりと発声するか、少し間を空けてみてください。
+        </div>
+      </div>
+      <div class="modal-footer py-1">
+        <button type="button" class="btn btn-secondary fw-bold" data-bs-dismiss="modal">閉じる</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+<div class="modal fade" id="voiceErrorModal" tabindex="-1" aria-labelledby="voiceErrorModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title fw-bold" id="voiceErrorModalLabel">
+            <i class="bi bi-exclamation-triangle-fill"></i> マイクが起動しない時の解決法
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="閉じる"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-danger shadow-sm mb-4">
+            <strong>原因：</strong> 現在「http://」で接続されているため、ブラウザのセキュリティ制限によりマイクが強制ブロックされています。以下の手順で<strong>このサーバーを「安全なサイト」として登録</strong>することで解決できます。
+        </div>
+
+        <h6 class="fw-bold border-bottom pb-2 mb-3"><i class="bi bi-gear-fill"></i> ブラウザの設定手順（Chrome / Edge 共通）</h6>
+        
+        <ol class="list-group list-group-numbered mb-4">
+          <li class="list-group-item">
+            ブラウザのURL入力欄に以下をコピーして貼り付け、Enterキーを押します。
+            <div class="bg-light p-2 mt-2 border rounded font-monospace small">
+                chrome://flags/#unsafely-treat-insecure-origin-as-secure
+                <br><span class="text-muted">（Edgeの場合も上記を貼り付ければ自動で変換されます）</span>
+            </div>
+          </li>
+          <li class="list-group-item">
+            黄色いマーカーで引かれた <strong>「Insecure origins treated as secure」</strong> という項目を探します。
+          </li>
+          <li class="list-group-item">
+            その下の入力欄に、このシステムのURLを正確に入力します。
+            <div class="bg-light p-2 mt-2 border rounded fw-bold text-primary text-center">
+                http://10.69.15.37:8108
+            </div>
+          </li>
+          <li class="list-group-item">
+            右側のプルダウンを「Disabled（無効）」から <strong>「Enabled（有効）」</strong> に変更します。
+          </li>
+          <li class="list-group-item">
+            画面右下に現れる <strong>「Relaunch（再起動）」</strong> ボタンを押し、ブラウザを再起動してください。
+          </li>
+        </ol>
+
+        <div class="alert alert-info py-2 small mb-0">
+            <i class="bi bi-info-circle"></i> この設定は、マイクを使用する端末（PC・タブレット）ごとに一度だけ行えば完了です。
+        </div>
+      </div>
+      <div class="modal-footer py-1">
+        <button type="button" class="btn btn-secondary fw-bold" data-bs-dismiss="modal">閉じる</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -203,6 +345,195 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 画面を開いた時の初期計算
     performCalculations();
+
+
+// ＝＝＝ ★ 音声入力（Voice Command）機能の実装 ＝＝＝
+    
+    // 1. Web Speech APIの初期化
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'ja-JP';
+        recognition.continuous = true; // 常に聞き続ける
+        recognition.interimResults = false; // 確定した言葉だけを取得
+
+        let isListening = false;
+        let isPersistent = false; // ★自動復旧モードの状態管理
+
+        // コンテナの作成
+        const voiceControlContainer = document.createElement('div');
+        voiceControlContainer.style.position = 'fixed';
+        voiceControlContainer.style.zIndex = '9999';
+        voiceControlContainer.style.display = 'flex';
+        voiceControlContainer.style.flexDirection = 'column';
+        voiceControlContainer.style.gap = '8px';
+        document.body.appendChild(voiceControlContainer);
+
+        // 1つ目のボタン：マイク起動
+        const micBtn = document.createElement('button');
+        micBtn.type = 'button';
+        micBtn.innerHTML = '<i class="bi bi-mic-fill"></i> 音声入力 開始';
+        micBtn.className = 'btn btn-danger fw-bold shadow-sm'; 
+        voiceControlContainer.appendChild(micBtn);
+
+        // 2つ目のボタン：自動復旧切替（★ここが潰れていた部分です）
+        const persistentBtn = document.createElement('button');
+        persistentBtn.type = 'button';
+        persistentBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> 自動復旧：OFF';
+        persistentBtn.className = 'btn btn-outline-secondary btn-sm shadow-sm bg-white fw-bold';
+        voiceControlContainer.appendChild(persistentBtn);
+
+        // 3つ目のボタン：使い方
+        const helpBtn = document.createElement('button');
+        helpBtn.type = 'button';
+        helpBtn.innerHTML = '<i class="bi bi-question-circle"></i> 音声入力の使い方';
+        helpBtn.className = 'btn btn-outline-secondary btn-sm shadow-sm bg-white fw-bold';
+        helpBtn.setAttribute('data-bs-toggle', 'modal');
+        helpBtn.setAttribute('data-bs-target', '#voiceHelpModal');
+        voiceControlContainer.appendChild(helpBtn);
+
+        // 4つ目のボタン：解決法（使い方の下）
+        const errorBtn = document.createElement('button');
+        errorBtn.type = 'button';
+        errorBtn.innerHTML = '<i class="bi bi-wrench-adjustable"></i> マイクが起動しない時の解決法';
+        errorBtn.className = 'btn btn-outline-danger btn-sm shadow-sm bg-white fw-bold';
+        errorBtn.setAttribute('data-bs-toggle', 'modal');
+        errorBtn.setAttribute('data-bs-target', '#voiceErrorModal');
+        voiceControlContainer.appendChild(errorBtn);
+
+
+
+        // 自動復旧ボタンのクリックイベント
+        persistentBtn.addEventListener('click', () => {
+            isPersistent = !isPersistent;
+            if (isPersistent) {
+                persistentBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> 自動復旧：ON';
+                persistentBtn.classList.replace('btn-outline-secondary', 'btn-primary');
+                persistentBtn.classList.remove('bg-white');
+                // ONにしたとき、もしマイクが止まっていたら開始させる
+                if (!isListening) micBtn.click();
+            } else {
+                persistentBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> 自動復旧：OFF';
+                persistentBtn.classList.replace('btn-primary', 'btn-outline-secondary');
+                persistentBtn.classList.add('bg-white');
+            }
+        });
+
+        // 位置調整ロジック（そのまま）
+        function updateMicPosition() {
+            const card = document.querySelector('.card.shadow-sm');
+            if (card) {
+                const rect = card.getBoundingClientRect();
+                if (window.innerWidth - rect.right > 180) {
+                    voiceControlContainer.style.setProperty('top', '200px', 'important'); 
+                    voiceControlContainer.style.setProperty('left', (rect.left - 200) + 'px', 'important'); 
+                    voiceControlContainer.style.bottom = 'auto';
+                    voiceControlContainer.style.right = 'auto';
+                } else {
+                    voiceControlContainer.style.top = 'auto';
+                    voiceControlContainer.style.left = 'auto';
+                    voiceControlContainer.style.setProperty('bottom', '20px', 'important');
+                    voiceControlContainer.style.setProperty('right', '20px', 'important');
+                }
+            }
+        }
+        window.addEventListener('resize', updateMicPosition);
+        setTimeout(updateMicPosition, 100);
+
+        micBtn.addEventListener('click', () => {
+            if (isListening) {
+                isPersistent = false; // 手動で止めた時は自動復旧も道連れでOFFにする（親切設計）
+                updatePersistentUI(); 
+                recognition.stop();
+            } else {
+                recognition.start();
+            }
+        });
+
+        function updatePersistentUI() {
+            persistentBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> 自動復旧：OFF';
+            persistentBtn.classList.replace('btn-primary', 'btn-outline-secondary');
+            persistentBtn.classList.add('bg-white');
+        }
+
+        recognition.onstart = () => {
+            isListening = true;
+            micBtn.innerHTML = '<i class="bi bi-mic-fill"></i> 音声入力中... (停止)';
+            micBtn.classList.replace('btn-danger', 'btn-success');
+        };
+
+        recognition.onend = () => {
+            isListening = false;
+            // ★重要：自動復旧がONならゾンビのように再起動
+            if (isPersistent) {
+                console.log("🔄 無音停止を検知。自動復旧モードにより再起動します...");
+                recognition.start();
+            } else {
+                micBtn.innerHTML = '<i class="bi bi-mic-fill"></i> 音声入力 開始';
+                micBtn.classList.replace('btn-success', 'btn-danger');
+            }
+        };
+
+
+
+       // 2. 音声コマンドの処理
+        recognition.onresult = (event) => {
+            // 最後に認識した言葉を取得
+            const transcript = event.results[event.results.length - 1][0].transcript.trim();
+            console.log("🗣️ 認識結果: " + transcript);
+
+            // ★追加：判定を邪魔する「。」「、」「スペース」を完全に除去
+            const cleanText = transcript.replace(/[。、\s]/g, '');
+
+            // 画面上の有効な入力欄をすべて取得（読み取り専用とtextareaは除外）
+            const focusableInputs = Array.from(document.querySelectorAll('input[type="text"]:not([readonly]), input[type="number"]:not([readonly])'));
+            if (focusableInputs.length === 0) return;
+
+            // 現在フォーカスが当たっている要素を探す（なければ0番目）
+            let currentIndex = focusableInputs.indexOf(document.activeElement);
+            if (currentIndex === -1) currentIndex = 0;
+
+            // --- コマンド分岐 ---
+            // ★修正：「^」や「$」を外し、ひらがなや類似表現を含めて寛容に判定する
+            
+            if (/(次|つぎ|下|した)/.test(cleanText)) {
+                // 次・下へ移動
+                currentIndex = (currentIndex + 1) % focusableInputs.length;
+                focusableInputs[currentIndex].focus();
+                
+            } else if (/(前|まえ|上|うえ|戻|もど)/.test(cleanText)) {
+                // 前・上へ移動
+                currentIndex = (currentIndex - 1 + focusableInputs.length) % focusableInputs.length;
+                focusableInputs[currentIndex].focus();
+                
+            } else if (/(クリア|消|くーりあ)/.test(cleanText)) {
+                // クリア
+                focusableInputs[currentIndex].value = '';
+                // 値を変更したら必ずinputイベントを発火させ、自動計算を回す
+                focusableInputs[currentIndex].dispatchEvent(new Event('input', { bubbles: true }));
+                
+            } else {
+                // --- 数値の抽出と入力 ---
+                // 全角数字を半角に変換、"てん"を"."に変換するなどの前処理
+                let numStr = cleanText.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
+                numStr = numStr.replace(/てん/g, '.');
+                
+                // 数値っぽい部分だけを正規表現で抜き出す（マイナス記号と小数点対応）
+                const match = numStr.match(/-?\d+(\.\d+)?/);
+                
+                if (match) {
+                    focusableInputs[currentIndex].value = match[0];
+                    // 値を変更したら必ずinputイベントを発火させ、自動計算を回す
+                    focusableInputs[currentIndex].dispatchEvent(new Event('input', { bubbles: true }));
+                    
+                } else {
+                    console.warn("数値を認識できませんでした（文字入力はスキップ）: " + transcript);
+                }
+            }
+        };
+    } else {
+        console.warn("このブラウザはWeb Speech APIに対応していません。");
+    }
 });
 </script>
 {% endblock content %}

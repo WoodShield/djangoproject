@@ -77,15 +77,18 @@
         text-overflow: ellipsis;
     }
 
-    /* ヘッダーの重なり部分（左上）の影調整 */
+    /* ＝＝＝ ★ここを修正：ヘッダーの重なり部分（左上）の影と位置調整 ＝＝＝ */
     .sticky-check-header {
-        z-index: 30;
+        top: 0; /* ★上にも固定 */
+        z-index: 40; /* ★さらに最前面へ */
         box-shadow: 1px 0 0 #dee2e6, 0 1px 0 #dee2e6, inset -1px -1px 0 #dee2e6;
     }
     .sticky-lot-header {
-        z-index: 30;
+        top: 0; /* ★上にも固定 */
+        z-index: 40; /* ★さらに最前面へ */
         box-shadow: 2px 0 0 #dee2e6, 0 1px 0 #dee2e6, inset -2px -1px 0 #dee2e6;
     }
+    /* ＝＝＝ 修正ここまで ＝＝＝ */
     
     /* ホバー時の背景色設定 */
     .table-hover tbody tr:hover .sticky-lot-col {
@@ -134,6 +137,13 @@
             <i class="bi bi-list-columns-reverse"></i> データ項目設定
         </a>
         
+        <form method="post" action="{% url 'batch_recalculate_all' database.pk %}" class="m-0">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-dark fw-bold shadow-sm" 
+                    onclick="return confirm('登録済みの全データの計算項目を、現在の定義に基づいて一括再計算します。よろしいですか？');">
+                <i class="bi bi-calculator"></i> 全データ再計算
+            </button>
+        </form>
         
         <a href="{% url 'lot_create' database.pk %}" class="btn btn-primary fw-bold shadow-sm">
             ＋ 新規データ登録

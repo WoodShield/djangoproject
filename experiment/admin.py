@@ -2,7 +2,9 @@ import csv
 from django.http import HttpResponse
 from django.contrib import admin
 
-from .models import Workspace, Database, DatabaseItemDefinition, LotData, TrainedModelMetadata, Organization, UserProfile
+from .models import Workspace, Database, DatabaseItemDefinition, LotData, TrainedModelMetadata, Organization, UserProfile,Material, MaterialValue, MaterialPropertyDefinition
+
+
 # =========================================================
 # 汎用的なCSVエクスポート関数の定義
 # =========================================================
@@ -137,3 +139,18 @@ class UserProfileAdmin(admin.ModelAdmin):
     list_display = ('user', 'display_name', 'organization')
     list_filter = ('organization',)
     search_fields = ('user__username', 'display_name')
+
+
+
+from django.contrib import admin
+
+
+@admin.register(Material)
+class MaterialAdmin(admin.ModelAdmin):
+    # 値テーブルをインライン表示（管理画面で値を直接編集可能になる）
+    class MaterialValueInline(admin.TabularInline):
+        model = MaterialValue
+        extra = 1
+
+    list_display = ('id', 'created_at', 'updated_at')
+    inlines = [MaterialValueInline]

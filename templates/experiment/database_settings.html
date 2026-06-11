@@ -236,29 +236,58 @@
         </div>
     </div>
 </div>
+
+
+
+<style>
+/* テーブルがはみ出た場合に、カード内で横スクロールできるようにする */
+.card-body.p-0 {
+    overflow-x: auto;
+}
+
+/* 項目名・選択肢・計算式（共通の2段テキストエリア） */
+.multi-line-input {
+    min-width: 150px; 
+    width: 100%;
+    resize: vertical;
+    line-height: 1.5;
+    font-family: inherit; /* ★修正：標準フォントに合わせる */
+    font-size: inherit;   /* ★修正：文字サイズを合わせる */
+}
+
+/* 計算式専用（数式を見やすくする等幅フォント） */
+.formula-input {
+    font-family: monospace; 
+}
+
+/* セルの折り返しを防ぐ */
+#item-tbody td {
+    white-space: nowrap; 
+}
+</style>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const tbody = document.getElementById('item-tbody');
 
-    // 並び順の更新ロジック
+    // ＝＝＝ 1. 並び順と保存のロジック ＝＝＝
     function updateOrder() {
         const rows = tbody.querySelectorAll('tr.item-row');
         let orderIndex = 0;
         rows.forEach((row) => {
             const idInput = row.querySelector('input[name$="-id"]'); 
-            const itemNameInput = row.querySelector('input[name$="-item_name"]'); 
+            const itemNameInput = row.querySelector('[name$="-item_name"]');
             const orderInput = row.querySelector('input[name$="-order"]'); 
             
             if ((idInput && idInput.value) || (itemNameInput && itemNameInput.value.trim() !== '')) {
                 if (orderInput) orderInput.value = orderIndex;
                 orderIndex++;
             } else {
-                if (orderInput) orderInput.value = ''; // 空行は番号も空にする
+                if (orderInput) orderInput.value = ''; 
             }
         });
     }
 
-    // 行の上下移動ボタン
     tbody.addEventListener('click', function(e) {
         if (e.target.classList.contains('move-up')) {
             const row = e.target.closest('tr.item-row');
@@ -269,45 +298,75 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // 初回読み込み時の計算
     updateOrder();
 
-    // 保存時の確認と、空行の送信ブロック
     const settingsForm = document.getElementById('settingsForm');
     settingsForm.addEventListener('submit', function(e) {
         if (!confirm('設定を保存します。よろしいですか？')) {
             e.preventDefault();
             return;
         }
-
-        // 送信直前に必ず並び順を再計算する
         updateOrder();
 
-        // ＝＝＝ ★最終修正: 不要な行を削除し、Djangoに予定行数を伝える ＝＝＝
         const rows = tbody.querySelectorAll('tr.item-row');
-        let validRowCount = 0; // 実際に送信する有効な行の数
-        
+        let validRowCount = 0; 
         rows.forEach(row => {
             const idInput = row.querySelector('input[name$="-id"]');
-            const itemNameInput = row.querySelector('input[name$="-item_name"]');
-            
-            // IDがなく（新規）、かつ項目名も空っぽの行の場合
+            const itemNameInput = row.querySelector('[name$="-item_name"]'); 
             if ((!idInput || !idInput.value) && (!itemNameInput || itemNameInput.value.trim() === '')) {
-                // disabledにするのではなく、行そのものをDOMから完全に削除する
                 row.remove();
             } else {
-                // 有効な行としてカウント
                 validRowCount++;
             }
         });
-
-        // DjangoのFormSetが管理している「TOTAL_FORMS（送信予定の総行数）」を探して、有効な行数に上書きする
         const totalFormsInput = document.querySelector('input[id$="-TOTAL_FORMS"]');
         if (totalFormsInput) {
             totalFormsInput.value = validRowCount;
         }
-        // ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
     });
+
+    // ＝＝＝ 2. 入力フォームのUI改善ロジック ＝＝＝
+
+    // 通常のinput（1行）を、textarea（2段）にすり替える処理
+    function convertToTextarea(input, isFormula = false) {
+        if (input.tagName.toLowerCase() === 'textarea') return; 
+        
+        const textarea = document.createElement('textarea');
+        textarea.name = input.name;
+        textarea.id = input.id;
+        textarea.value = input.value;
+        textarea.className = input.className + ' multi-line-input';
+        
+        // ★修正：計算式の場合のみ、等幅フォントのクラスを追加
+        if (isFormula) {
+            textarea.classList.add('formula-input');
+        }
+        
+        textarea.rows = 2; // 2段に指定
+        input.parentNode.replaceChild(textarea, input);
+    }
+
+    // UI改善を全行に適用する関数
+    function applyUIEnhancements() {
+        // [項目名] と [選択肢] は標準フォントで2段化
+        const standardInputs = document.querySelectorAll('input[name$="-item_name"], input[name$="-choices_text"]');
+        standardInputs.forEach(input => convertToTextarea(input, false));
+
+        // [計算式] は数式が見やすい等幅フォントで2段化
+        const formulaInputs = document.querySelectorAll('input[name$="-calculation_formula"]');
+        formulaInputs.forEach(input => convertToTextarea(input, true));
+    }
+
+    // ページ表示直後にUIを最適化する
+    setTimeout(applyUIEnhancements, 50);
+
+    // 行が追加された時（動的変更時）にもUI最適化を再実行する
+    const observer = new MutationObserver((mutations) => {
+        applyUIEnhancements();
+    });
+    if (tbody) {
+        observer.observe(tbody, { childList: true });
+    }
 });
 </script>
 {% endblock content %}

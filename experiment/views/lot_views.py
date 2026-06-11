@@ -325,3 +325,26 @@ class LotComparisonView(ListView):
             
         return context
 
+
+# ＝＝＝ 一括再計算機能 ＝＝＝
+def batch_recalculate_all(request, pk):
+    if request.method == 'POST':
+        database = get_object_or_404(Database, pk=pk)
+        lots = LotData.objects.filter(database=database)
+        
+        count = 0
+        for lot in lots:
+            # 万が一データが空だった場合の安全装置
+            current_data = lot.experimental_data or {}
+            
+            # JSONの中身を直接 calculate_auto_fields に通して再計算させる
+            updated_data = calculate_auto_fields(database, current_data)
+            
+            # 再計算されたデータをセットして保存
+            lot.experimental_data = updated_data
+            lot.save(update_fields=['experimental_data']) 
+            
+            count += 1
+            
+        messages.success(request, f"{count} 件のデータを最新の計算式で再計算しました。")
+    return redirect('lot_list', pk=pk)

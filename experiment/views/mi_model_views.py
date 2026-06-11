@@ -20,12 +20,15 @@ def api_train_multi_models(request, dept_pk):
         return JsonResponse({'status': 'error', 'message': '無効なリクエストです。'}, status=405)
 
     try:
+        # セッションのデータを最新の状態に強制更新する
+        request.session.modified = True 
+        
         data = json.loads(request.body)
         database_id = data.get('database_id')
         target_y_list = data.get('target_variables', [])
         models_config = data.get('models_config', {})
 
-        # ★修正1: フロントから送られてきた前処理の設定を受け取り、箱（辞書）にまとめる
+        # フロントから送られてきた前処理の設定を受け取り、箱（辞書）にまとめる
         preprocessing_meta = {
             'type_overrides': data.get('type_overrides', {}),
             'min_max_rules': data.get('min_max_rules', []),
@@ -34,17 +37,22 @@ def api_train_multi_models(request, dept_pk):
         }
 
         if not target_y_list:
-            return JsonResponse({'status': 'error', 'message': '目的変数が選択されていません。'})
+            return JsonResponse({'status': 'error', 'message': '学習用データが準備されていません。'}, status=400)
 
         df_json = request.session.get('mi_current_df')
         if not df_json:
             return JsonResponse({'status': 'error', 'message': 'データセットの有効期限切れです。'})
         
         df = pd.read_json(io.StringIO(df_json), orient='split')
+
+        # UIからチェックされた特徴量リストを確実に反映
+        feature_cols = data.get('feature_variables', [])
+        
         label_mappings = request.session.get('mi_label_mappings', {})
 
         final_details = []
         temp_models = request.session.get('temp_trained_models', {})
+
 
         for target in target_y_list:
             config = models_config.get(target, {})
@@ -125,6 +133,10 @@ def api_optimize_recipe(request, dept_pk):
             data = json.loads(request.body)
             model_ids = data.get('model_ids', [])
             target_goals = data.get('target_goals', {})
+            fixed_features = data.get('fixed_features', {})
+            
+            # ★追加: 配合制約を受け取る
+            mixture_settings = data.get('mixture_settings', {})
 
             if not model_ids:
                 return JsonResponse({'status': 'error', 'message': 'モデルが選択されていません。'})
@@ -134,7 +146,14 @@ def api_optimize_recipe(request, dept_pk):
             if df_json:
                 df = pd.read_json(io.StringIO(df_json), orient='split')
 
-            result = MultiObjectiveInverseSkill.run_multi_optimization(model_ids, target_goals, df)
+            # ★修正: スキルに引数として mixture_settings を渡す
+            result = MultiObjectiveInverseSkill.run_multi_optimization(
+                model_ids=model_ids, 
+                target_goals=target_goals, 
+                df=df,
+                fixed_features=fixed_features,
+                mixture_settings=mixture_settings
+            )
             return JsonResponse(result)
             
         except Exception as e:
@@ -144,7 +163,7 @@ def api_optimize_recipe(request, dept_pk):
             
     return JsonResponse({'status': 'error', 'message': 'Invalid request'})
 
-
+    
 def api_register_model(request, dept_pk):
     """手動セーブボタンが押された時にDBに正式保存するAPI"""
     if request.method == 'POST':
@@ -164,6 +183,7 @@ def api_register_model(request, dept_pk):
                 m_data['preprocessing_meta'] = {}
                 
             m_data['preprocessing_meta']['memo'] = memo
+            m_data['preprocessing_meta']['label_mappings'] = m_data.get('label_mappings', {})
             
             from ..models import Database
             from django.core.files import File
